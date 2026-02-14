@@ -8,11 +8,13 @@ This is the main API server that provides endpoints for:
 - Snapshot comparison
 """
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from typing import List, Optional
+from typing import List, Optional, Set
 import logging
+import asyncio
+import json
 
 from core import get_db, close_db
 from core.models import RagSession, SessionDetail, CostBreakdown
@@ -24,6 +26,35 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Set[WebSocket] = set()
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.add(websocket)
+        logger.info(f"WebSocket client connected. Total: {len(self.active_connections)}")
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.discard(websocket)
+        logger.info(f"WebSocket client disconnected. Total: {len(self.active_connections)}")
+
+    async def broadcast(self, message: dict):
+        """Broadcast message to all connected clients."""
+        disconnected = set()
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                logger.error(f"Error sending to client: {e}")
+                disconnected.add(connection)
+        
+        # Remove disconnected clients
+        self.active_connections -= disconnected
+
+manager = ConnectionManager()
 
 # Create FastAPI app
 app = FastAPI(
@@ -97,6 +128,36 @@ async def health_check():
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail=f"Service unhealthy: {str(e)}")
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time updates."""
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive and receive messages
+            data = await websocket.receive_text()
+            # Echo back for testing
+            await websocket.send_json({
+                "type": "pong",
+                "message": "Connection alive"
+            })
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        manager.disconnect(websocket)
+
+
+# Broadcast helper function
+async def broadcast_event(event_type: str, data: dict):
+    """Broadcast event to all connected WebSocket clients."""
+    message = {
+        "type": event_type,
+        "data": data
+    }
+    await manager.broadcast(message)
 
 
 # Error handlers
