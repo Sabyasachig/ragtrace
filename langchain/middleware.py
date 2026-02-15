@@ -1,5 +1,5 @@
 """
-LangChain middleware for RAG Debugger.
+"""LangChain middleware for RAGTrace.
 
 This module provides callback handlers that integrate with LangChain
 to automatically capture RAG pipeline events.
@@ -19,9 +19,9 @@ from core.models import RagSession, StoredEvent
 logger = logging.getLogger(__name__)
 
 
-class RagDebuggerCallback(BaseCallbackHandler):
+class RagTracer(BaseCallbackHandler):
     """
-    LangChain callback handler for RAG debugging.
+    LangChain callback handler for RAG tracing.
     
     This handler intercepts LangChain events and captures:
     - Retrieval: Documents retrieved from vector stores
@@ -29,11 +29,11 @@ class RagDebuggerCallback(BaseCallbackHandler):
     - Generation: LLM responses and token usage
     
     Usage:
-        handler = RagDebuggerCallback(session_id="my-session", query="What is RAG?")
+        tracer = RagTracer(session_id="my-session", query="What is RAG?")
         chain = RetrievalQA.from_chain_type(
             llm=llm,
             retriever=retriever,
-            callbacks=[handler]
+            callbacks=[tracer]
         )
         result = chain.run("What is RAG?")
     """
@@ -73,7 +73,7 @@ class RagDebuggerCallback(BaseCallbackHandler):
         # Capture session
         self._capture: Optional[CaptureSession] = None
         
-        logger.debug(f"RagDebuggerCallback initialized with session_id={session_id}")
+        logger.debug(f"RagTracer initialized with session_id={session_id}")
     
     def _ensure_capture_session(self):
         """Ensure capture session is initialized."""
@@ -365,27 +365,27 @@ class RagDebuggerCallback(BaseCallbackHandler):
         return summary
 
 
-class SimpleRagDebugger:
+class SimpleRagTracer:
     """
-    Simplified interface for quick debugging.
+    Simplified interface for quick tracing.
     
     Usage:
-        with SimpleRagDebugger("What is RAG?") as debugger:
+        with SimpleRagTracer("What is RAG?") as tracer:
             result = chain.run("What is RAG?")
         
-        print(f"Session ID: {debugger.session_id}")
-        print(f"Cost: ${debugger.cost:.4f}")
+        print(f"Session ID: {tracer.session_id}")
+        print(f"Cost: ${tracer.cost:.4f}")
     """
     
     def __init__(self, query: str):
         """
-        Initialize simple debugger.
+        Initialize simple tracer.
         
         Args:
             query: User query
         """
         self.query = query
-        self.callback = RagDebuggerCallback(query=query, auto_save=True)
+        self.callback = RagTracer(query=query, auto_save=True)
         self.session_id = None
         self.cost = 0.0
     

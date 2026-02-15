@@ -145,8 +145,8 @@ def test_langchain_import():
     print("🔗 Testing LangChain Integration...")
     
     try:
-        from langchain.middleware import RagDebuggerCallback
-        assert RagDebuggerCallback is not None, "Callback import failed"
+        from langchain.middleware import RagTracer
+        assert RagTracer is not None, "Tracer import failed"
         print(f"  ✅ LangChain callback imported successfully")
     except ImportError as e:
         print(f"  ❌ LangChain import failed: {e}")
@@ -175,9 +175,9 @@ def main():
         print("=" * 60)
         print()
         print("Next steps:")
-        print("1. Run: ragdebug init")
+        print("1. Run: ragtrace init")
         print("2. Try: examples/simple_rag.py (requires OpenAI API key)")
-        print("3. Inspect: ragdebug trace last")
+        print("3. Inspect: ragtrace trace last")
         print()
         return 0
         

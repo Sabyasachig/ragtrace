@@ -1,10 +1,10 @@
-# Publishing RAG Debugger to PyPI
+# Publishing RAGTrace to PyPI
 
 ## 📦 Publishing Strategy
 
 ### PyPI Distribution (Open Source Core)
 
-RAG Debugger is designed as a **local-first debugging tool** that users can install via pip and use completely offline.
+RAGTrace is designed as a **local-first observability tool** that users can install via pip and use completely offline.
 
 ## 🚀 Publishing to PyPI
 
@@ -28,8 +28,8 @@ rm -rf dist/ build/ *.egg-info
 python -m build
 
 # This creates:
-# - dist/rag-debugger-0.2.0.tar.gz (source)
-# - dist/rag_debugger-0.2.0-py3-none-any.whl (wheel)
+# - dist/ragtrace-0.2.0.tar.gz (source)
+# - dist/ragtrace-0.2.0-py3-none-any.whl (wheel)
 ```
 
 ### Test on TestPyPI First
@@ -39,11 +39,11 @@ python -m build
 python -m twine upload --repository testpypi dist/*
 
 # Test installation
-pip install --index-url https://test.pypi.org/simple/ rag-debugger
+pip install --index-url https://test.pypi.org/simple/ ragtrace
 
 # Verify it works
-ragdebug --version
-ragdebug init
+ragtrace --version
+ragtrace init
 ```
 
 ### Publish to PyPI (Production)
@@ -53,7 +53,7 @@ ragdebug init
 python -m twine upload dist/*
 
 # Now anyone can install with:
-# pip install rag-debugger
+# pip install ragtrace
 ```
 
 ## 📖 User Installation (After Publishing)
@@ -62,20 +62,20 @@ python -m twine upload dist/*
 
 ```bash
 # Install from PyPI
-pip install rag-debugger
+pip install ragtrace
 
 # Initialize database
-ragdebug init
+ragtrace init
 
 # Start using immediately
-python my_rag_app.py  # with debugger integrated
-ragdebug trace last
+python my_rag_app.py  # with tracer integrated
+ragtrace show last
 ```
 
 ### With Development Tools
 
 ```bash
-pip install rag-debugger[dev]
+pip install ragtrace[dev]
 ```
 
 ## 🌐 SaaS Integration Strategy
@@ -89,13 +89,13 @@ While the core tool is **local-first**, you can build a SaaS layer on top:
 Users run locally but can optionally sync to cloud:
 
 ```python
-from rag_debugger import RagDebuggerCallback
+from ragtrace import RagTracer
 
 # Local-only (default, free)
-debugger = RagDebuggerCallback(auto_save=True)
+tracer = RagTracer(auto_save=True)
 
 # With cloud sync (SaaS tier)
-debugger = RagDebuggerCallback(
+tracer = RagTracer(
     auto_save=True,
     cloud_sync=True,
     api_key="your-saas-api-key"  # SaaS subscription
@@ -112,12 +112,12 @@ debugger = RagDebuggerCallback(
 
 ```python
 # Free tier: Local storage only
-debugger = RagDebuggerCallback(storage="local")
+tracer = RagTracer(storage="local")
 
 # SaaS tier: Cloud storage with local cache
-debugger = RagDebuggerCallback(
+tracer = RagTracer(
     storage="cloud",
-    api_endpoint="https://api.ragdebugger.com",
+    api_endpoint="https://api.ragtrace.com",
     api_key="your-key"
 )
 ```
@@ -151,7 +151,7 @@ debugger = RagDebuggerCallback(
 #### Phase 1: PyPI Distribution (Now)
 ```bash
 # Users can install immediately
-pip install rag-debugger
+pip install ragtrace
 
 # Works 100% offline, no signup needed
 ```
@@ -159,14 +159,14 @@ pip install rag-debugger
 #### Phase 2: Add Cloud Sync Option (Future)
 ```python
 # Add optional cloud backend
-from rag_debugger.cloud import CloudSync
+from ragtrace.cloud import CloudSync
 
 sync = CloudSync(api_key="...")
 sync.push_session(session_id)
 ```
 
 #### Phase 3: SaaS Dashboard (Future)
-- Web dashboard at `https://app.ragdebugger.com`
+- Web dashboard at `https://app.ragtrace.com`
 - Team collaboration features
 - Advanced analytics
 - Cost optimization insights
@@ -180,10 +180,10 @@ Add installation section:
 ## Installation
 
 ```bash
-pip install rag-debugger
+pip install ragtrace
 ```
 
-No configuration needed! Start debugging immediately.
+No configuration needed! Start tracing immediately.
 ```
 
 ### Add to setup.py
@@ -215,7 +215,7 @@ For SaaS version, consider:
 
 ```bash
 # Publish to PyPI
-pip install rag-debugger
+pip install ragtrace
 
 # Promote on:
 # - Hacker News
@@ -294,15 +294,15 @@ Then add:
 python -m build
 
 # Check package contents
-tar -tzf dist/rag-debugger-0.2.0.tar.gz | grep ui/
+tar -tzf dist/ragtrace-0.2.0.tar.gz | grep ui/
 
 # Install locally
 pip install dist/*.whl
 
 # Test CLI
-ragdebug --version
-ragdebug init
+ragtrace --version
+ragtrace init
 
 # Test import
-python -c "from rag_debugger import RagDebuggerCallback; print('✓ Package works')"
+python -c "from ragtrace import RagTracer; print('✓ Package works')"
 ```

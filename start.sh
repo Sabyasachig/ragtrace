@@ -8,7 +8,7 @@ echo ""
 
 # Check if we're in the right directory
 if [ ! -f "pyproject.toml" ]; then
-    echo "❌ Error: Please run this from the rag-debugger directory"
+    echo "❌ Error: Please run this from the ragtrace directory"
     exit 1
 fi
 
@@ -33,7 +33,7 @@ echo "✅ Environment ready!"
 echo ""
 
 # Generate test data if database doesn't exist
-if [ ! -f "$HOME/.ragdebug/ragdebug.db" ]; then
+if [ ! -f "$HOME/.ragtrace/ragtrace.db" ]; then
     echo "📊 Generating sample test data..."
     python3 ui/generate_test_data.py
     echo ""
@@ -57,7 +57,7 @@ trap cleanup SIGINT SIGTERM
 
 # Start API server in background
 echo "🔌 Starting API server on port 8000..."
-uvicorn api.main:app --port 8000 --log-level warning > /tmp/ragdebug-api.log 2>&1 &
+uvicorn api.main:app --port 8000 --log-level warning > /tmp/ragtrace-api.log 2>&1 &
 API_PID=$!
 
 # Wait for API to start
@@ -66,7 +66,7 @@ sleep 2
 # Check if API started successfully
 if ! curl -s http://localhost:8000/health > /dev/null 2>&1; then
     echo "❌ Failed to start API server"
-    echo "   Check logs: tail /tmp/ragdebug-api.log"
+    echo "   Check logs: tail /tmp/ragtrace-api.log"
     kill $API_PID 2>/dev/null
     exit 1
 fi
@@ -76,7 +76,7 @@ echo ""
 
 # Start UI server in background
 echo "🎨 Starting UI server on port 3000..."
-cd ui && python3 serve.py > /tmp/ragdebug-ui.log 2>&1 &
+cd ui && python3 serve.py > /tmp/ragtrace-ui.log 2>&1 &
 UI_PID=$!
 cd ..
 
@@ -97,8 +97,8 @@ echo ""
 echo "🌐 Web UI:        http://localhost:3000"
 echo ""
 echo "📊 Logs:"
-echo "   API:  tail -f /tmp/ragdebug-api.log"
-echo "   UI:   tail -f /tmp/ragdebug-ui.log"
+echo "   API:  tail -f /tmp/ragtrace-api.log"
+echo "   UI:   tail -f /tmp/ragtrace-ui.log"
 echo ""
 echo "════════════════════════════════════════════════════════════════"
 echo ""

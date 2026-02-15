@@ -118,8 +118,8 @@ print()
 # Test 6: LangChain Integration
 print("6️⃣  Testing LangChain Integration...")
 try:
-    from langchain.middleware import RagDebugHandler
-    print(f"   ✅ RagDebugHandler imported successfully")
+    from langchain.middleware import RagTracer
+    print(f"   ✅ RagTracer imported successfully")
     print(f"   ℹ️  Use with LangChain callbacks")
 except ImportError as e:
     print(f"   ⚠️  LangChain not installed (optional dependency)")

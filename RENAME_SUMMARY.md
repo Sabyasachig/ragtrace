@@ -16,7 +16,7 @@ All project references have been systematically renamed from "RAG Debugger" to "
 ### Technical Changes
 - **Database path**: `~/.ragdebug/` → `~/.ragtrace/`
 - **Import**: `from langchain import RagDebuggerCallback` → `from ragtrace import RagTracer`
-- **CLI subcommands**: `ragdebug trace` → `ragtrace show`
+- **CLI subcommands**: `ragdebug trace` → `ragtrace trace`
 - **Download filenames**: `ragdebug-*.json` → `ragtrace-*.json`
 
 ## 📝 Files Modified
@@ -69,7 +69,7 @@ tracer = RagTracer(auto_save=True)
 
 # 4. Update CLI commands
 # OLD: ragdebug trace last
-# NEW: ragtrace show last
+# NEW: ragtrace trace last
 ```
 
 ### Database Migration

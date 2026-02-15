@@ -1,7 +1,11 @@
 """
-LangChain integration for RAG Debugger.
+LangChain integration for RAGTrace.
 """
 
-from .middleware import RagDebuggerCallback, SimpleRagDebugger
+from .middleware import RagTracer, SimpleRagTracer
 
-__all__ = ["RagDebuggerCallback", "SimpleRagDebugger"]
+# Backwards compatibility aliases
+RagDebuggerCallback = RagTracer
+SimpleRagDebugger = SimpleRagTracer
+
+__all__ = ["RagTracer", "SimpleRagTracer", "RagDebuggerCallback", "SimpleRagDebugger"]

@@ -6,8 +6,8 @@
 
 1. Go to [GitHub](https://github.com/new)
 2. Fill in the details:
-   - **Repository name**: `rag-debugger`
-   - **Description**: "DevTools for RAG pipelines - Debug, inspect, and optimize Retrieval-Augmented Generation systems"
+   - **Repository name**: `ragtrace`
+   - **Description**: "Observability and tracing for RAG pipelines - Debug, inspect, and optimize Retrieval-Augmented Generation systems"
    - **Visibility**: Public (recommended) or Private
    - **DO NOT** initialize with README, .gitignore, or license (we already have these)
 3. Click "Create repository"
@@ -21,10 +21,10 @@ After creating the repository, GitHub will show you commands. Use these:
 GITHUB_USERNAME="your-github-username"
 
 # Add remote origin
-git remote add origin https://github.com/$GITHUB_USERNAME/rag-debugger.git
+git remote add origin https://github.com/$GITHUB_USERNAME/ragtrace.git
 
 # Or if you use SSH:
-git remote add origin git@github.com:$GITHUB_USERNAME/rag-debugger.git
+git remote add origin git@github.com:$GITHUB_USERNAME/ragtrace.git
 
 # Push to GitHub
 git push -u origin main
@@ -34,7 +34,7 @@ git push -u origin main
 
 Visit your repository:
 ```
-https://github.com/your-username/rag-debugger
+https://github.com/your-username/ragtrace
 ```
 
 You should see:
@@ -102,7 +102,7 @@ git push
 ```bash
 # Remove existing remote and add again
 git remote remove origin
-git remote add origin https://github.com/your-username/rag-debugger.git
+git remote add origin https://github.com/your-username/ragtrace.git
 ```
 
 ### Error: "Authentication failed"
