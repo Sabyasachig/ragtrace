@@ -4,7 +4,7 @@
    ======================================== */
 
 const CONFIG = {
-    apiBaseUrl: 'http://localhost:8000/api/v1',
+    apiBaseUrl: 'http://localhost:8000/api',  // Fixed: /api not /api/v1
     wsUrl: 'ws://localhost:8000/ws',
     refreshInterval: 5000,
     toastDuration: 4000
