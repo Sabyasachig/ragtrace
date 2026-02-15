@@ -1,5 +1,5 @@
 """
-FastAPI application for RAG Debugger.
+FastAPI application for RAGTrace.
 
 This is the main API server that provides endpoints for:
 - Session management
@@ -58,9 +58,9 @@ manager = ConnectionManager()
 
 # Create FastAPI app
 app = FastAPI(
-    title="RAG Debugger API",
-    description="API for debugging and analyzing RAG pipelines",
-    version="0.1.0",
+    title="RAGTrace API",
+    description="Observability and tracing API for RAG pipelines",
+    version="0.2.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -84,7 +84,7 @@ async def startup_event():
     try:
         db = get_db()
         logger.info(f"Database initialized at {db.db_path}")
-        logger.info("RAG Debugger API started successfully")
+        logger.info("RAGTrace API started successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
         raise
@@ -96,7 +96,7 @@ async def shutdown_event():
     try:
         close_db()
         logger.info("Database connection closed")
-        logger.info("RAG Debugger API shut down successfully")
+        logger.info("RAGTrace API shut down successfully")
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
 

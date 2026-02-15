@@ -49,7 +49,7 @@ def init():
     Creates configuration directory and database.
     """
     try:
-        console.print("\n[bold blue]🚀 Initializing RAG Debugger...[/bold blue]")
+        console.print("\n[bold blue]🚀 Initializing RAGTrace...[/bold blue]")
         
         # Get database (this creates it if it doesn't exist)
         db = get_db()
@@ -57,11 +57,11 @@ def init():
         console.print(f"\n✅ Database initialized at: [cyan]{db.db_path}[/cyan]")
         console.print(f"✅ Config directory: [cyan]{db.db_path.parent}[/cyan]")
         
-        console.print("\n[bold green]✨ RAG Debugger initialized successfully![/bold green]")
+        console.print("\n[bold green]✨ RAGTrace initialized successfully![/bold green]")
         console.print("\nNext steps:")
-        console.print("  1. Start the server: [yellow]ragdebug run[/yellow]")
+        console.print("  1. Start the server: [yellow]ragtrace run[/yellow]")
         console.print("  2. Integrate with your RAG app")
-        console.print("  3. View traces: [yellow]ragdebug trace last[/yellow]")
+        console.print("  3. View traces: [yellow]ragtrace show last[/yellow]")
         
     except Exception as e:
         console.print(f"\n[bold red]❌ Error:[/bold red] {e}")
@@ -188,7 +188,7 @@ def list(limit: int):
         
         console.print("\n")
         console.print(table)
-        console.print(f"\n[dim]Use 'ragdebug trace <session_id>' to view details[/dim]")
+console.print(f"\n[dim]Use 'ragtrace show <session_id>' to view details[/dim]")
         
     except Exception as e:
         console.print(f"[bold red]❌ Error:[/bold red] {e}")

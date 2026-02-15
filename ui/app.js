@@ -966,7 +966,7 @@ function exportSessionJSON() {
     const a = document.createElement('a');
     a.href = url;
     const sessionId = STATE.currentSessionData.id || STATE.currentSessionData.session_id || 'session';
-    a.download = `ragdebug-${sessionId.slice(0, 8)}-${Date.now()}.json`;
+    a.download = `ragtrace-${sessionId.slice(0, 8)}-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     
@@ -1007,7 +1007,7 @@ function exportSessionCSV() {
     const a = document.createElement('a');
     a.href = url;
     const sessionId = STATE.currentSession || 'session';
-    a.download = `ragdebug-events-${sessionId.slice(0, 8)}-${Date.now()}.csv`;
+    a.download = `ragtrace-events-${sessionId.slice(0, 8)}-${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     
@@ -1227,7 +1227,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, CONFIG.refreshInterval);
 
-    console.log('RAG Debugger UI initialized');
+    console.log('RAGTrace UI initialized');
 });
 
 /* ========================================

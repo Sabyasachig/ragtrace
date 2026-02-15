@@ -24,7 +24,7 @@ from langchain.text_splitter import CharacterTextSplitter
 from langchain.chains import RetrievalQA
 from langchain.schema import Document
 
-from langchain import RagDebuggerCallback
+from langchain import RagTracer
 
 
 def create_sample_documents():
@@ -48,7 +48,7 @@ def create_sample_documents():
         ),
         Document(
             page_content="RAG Debugger is a tool that helps developers understand and optimize their RAG pipelines by capturing retrieval events, prompt assembly, and LLM generation costs.",
-            metadata={"source": "rag_debugger.txt", "page": 1}
+            metadata={"source": "ragtrace.txt", "page": 1}
         ),
     ]
     return docs
@@ -64,7 +64,7 @@ def main():
         print("export OPENAI_API_KEY='your-key-here'")
         return
     
-    print("🚀 RAG Debugger - Simple Example")
+    print("🚀 RAGTrace - Simple Example")
     print("=" * 50)
     
     # Create sample documents
@@ -95,8 +95,8 @@ def main():
     print("\n🔧 Setting up RAG chain with debugger...")
     query = "What is RAG and what are its main benefits?"
     
-    # Create debugger callback
-    callback = RagDebuggerCallback(query=query, auto_save=True)
+    # Create tracer callback
+    tracer = RagTracer(query=query, auto_save=True)
     
     chain = RetrievalQA.from_chain_type(
         llm=llm,
@@ -124,10 +124,10 @@ def main():
         for i, doc in enumerate(result.get('source_documents', []), 1):
             print(f"   {i}. {doc.metadata.get('source', 'Unknown')} - {doc.page_content[:100]}...")
         
-        # Get summary from debugger
-        summary = callback.get_summary()
+        # Get summary from tracer
+        summary = tracer.get_summary()
         print("\n" + "=" * 50)
-        print("🐛 DEBUG SUMMARY")
+        print("🔍 TRACE SUMMARY")
         print("=" * 50)
         print(f"   Session ID: {summary['session_id']}")
         print(f"   Documents Retrieved: {summary['documents_retrieved']}")
@@ -136,9 +136,9 @@ def main():
         
         print("\n✅ Session saved to database!")
         print(f"\nTo view this session:")
-        print(f"   ragdebug trace {summary['session_id']}")
+        print(f"   ragtrace show {summary['session_id']}")
         print(f"   or")
-        print(f"   ragdebug trace last")
+        print(f"   ragtrace show last"))
         
     except Exception as e:
         print(f"\n❌ Error: {e}")
@@ -147,7 +147,7 @@ def main():
         return
     
     print("\n" + "=" * 50)
-    print("✨ Done! Check ~/.ragdebug/ragdebug.db for stored data")
+    print("✨ Done! Check ~/.ragtrace/ragtrace.db for stored data")
     print("=" * 50)
 
 

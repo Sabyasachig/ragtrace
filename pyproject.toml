@@ -1,10 +1,10 @@
 [tool.poetry]
-name = "rag-debugger"
-version = "0.1.0"
-description = "DevTools for Retrieval-Augmented Generation"
+name = "ragtrace"
+version = "0.2.0"
+description = "Observability and tracing for Retrieval-Augmented Generation pipelines"
 authors = ["Sabyasachi Ghosh"]
 readme = "README.md"
-packages = [{include = "core"}, {include = "langchain"}, {include = "api"}, {include = "cli"}]
+packages = [{include = "core"}, {include = "langchain"}, {include = "api"}, {include = "cli"}, {include = "ui"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"
@@ -27,7 +27,7 @@ ruff = "^0.1.0"
 pytest-asyncio = "^0.21.0"
 
 [tool.poetry.scripts]
-ragdebug = "cli.main:cli"
+ragtrace = "cli.main:cli"
 
 [build-system]
 requires = ["poetry-core"]

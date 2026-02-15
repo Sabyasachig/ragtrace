@@ -1,14 +1,14 @@
-# RAG Debugger 🔍
+# RAGTrace 📊
 
-> **DevTools for your RAG pipelines** - Debug, inspect, and optimize Retrieval-Augmented Generation systems with ease.
+> **Observability for RAG pipelines** - Trace, inspect, and optimize Retrieval-Augmented Generation systems with ease.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-## ✨ What is RAG Debugger?
+## ✨ What is RAGTrace?
 
-RAG Debugger is a lightweight debugging layer for RAG (Retrieval-Augmented Generation) systems that captures and visualizes every step of your pipeline:
+RAGTrace is a lightweight observability layer for RAG (Retrieval-Augmented Generation) systems that captures and visualizes every step of your pipeline:
 
 - 🔍 **Event Capture** - Automatically intercepts retrieval, prompt, and generation events
 - 💰 **Cost Tracking** - Accurate token counting and cost estimation per query
@@ -17,7 +17,7 @@ RAG Debugger is a lightweight debugging layer for RAG (Retrieval-Augmented Gener
 - 🌐 **REST API** - Query and analyze sessions programmatically
 - 🧪 **Regression Testing** - Snapshot and compare RAG outputs
 
-**Think of it as Chrome DevTools, but for your RAG pipelines.**
+**Think of it as OpenTelemetry, but specifically for RAG pipelines.**
 
 ## 🚀 Quick Start
 
@@ -25,8 +25,8 @@ RAG Debugger is a lightweight debugging layer for RAG (Retrieval-Augmented Gener
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/rag-debugger.git
-cd rag-debugger
+git clone https://github.com/yourusername/ragtrace.git
+cd ragtrace
 
 # Install dependencies (using pip)
 pip install -e .
@@ -36,7 +36,7 @@ poetry install
 poetry shell
 
 # Initialize database
-ragdebug init
+ragtrace init
 ```
 
 ### Basic Usage
@@ -46,21 +46,21 @@ from langchain.vectorstores import FAISS
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.chat_models import ChatOpenAI
 from langchain.chains import RetrievalQA
-from langchain import RagDebuggerCallback
+from ragtrace import RagTracer
 
 # Your existing RAG setup
 embeddings = OpenAIEmbeddings()
 vectorstore = FAISS.from_texts(["Your documents here..."], embeddings)
 llm = ChatOpenAI(model="gpt-3.5-turbo")
 
-# Add RAG Debugger - just one line!
-debugger = RagDebuggerCallback(auto_save=True)
+# Add RAGTrace - just one line!
+tracer = RagTracer(auto_save=True)
 
-# Create chain with debugger
+# Create chain with tracer
 chain = RetrievalQA.from_chain_type(
     llm=llm,
     retriever=vectorstore.as_retriever(),
-    callbacks=[debugger]  # ← Automatic capture!
+    callbacks=[tracer]  # ← Automatic capture!
 )
 
 # Run your query (automatically captured)
@@ -71,16 +71,16 @@ result = chain.run("What is RAG?")
 
 ```bash
 # View latest session in CLI
-ragdebug trace last
+ragtrace show last
 
 # List all sessions
-ragdebug list
+ragtrace list
 
 # Export to JSON
-ragdebug export <session-id> > session.json
+ragtrace export <session-id> > session.json
 
 # Start API server (for Web UI)
-ragdebug run
+ragtrace run
 
 # Or start both servers for full Web UI experience
 uvicorn api.main:app --port 8000 &  # API server
@@ -89,18 +89,18 @@ python ui/serve.py                   # UI server → http://localhost:3000
 
 ## 🌐 Web UI
 
-RAG Debugger includes a modern web interface for visualizing and analyzing your RAG pipelines:
+RAGTrace includes a modern web interface for visualizing and analyzing your RAG pipelines:
 
 ### Start the Servers
 
 ```bash
 # Terminal 1: Start API server
-cd rag-debugger
+cd ragtrace
 source venv/bin/activate
 uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Terminal 2: Start UI server
-cd rag-debugger
+cd ragtrace
 python ui/serve.py
 ```
 
@@ -170,15 +170,15 @@ Then open **http://localhost:3000** in your browser.
 ### 🎨 CLI Commands
 
 ```bash
-ragdebug init              # Initialize database
-ragdebug list              # List recent sessions
-ragdebug trace [id]        # View session details
-ragdebug trace last        # View latest session
-ragdebug export <id>       # Export to JSON
-ragdebug clear             # Clear all data
-ragdebug snapshot save     # Save snapshot
-ragdebug snapshot list     # List snapshots
-ragdebug run               # Start API server
+ragtrace init              # Initialize database
+ragtrace list              # List recent sessions
+ragtrace show [id]         # View session details
+ragtrace show last         # View latest  session
+ragtrace export <id>       # Export to JSON
+ragtrace clear             # Clear all data
+ragtrace snapshot save     # Save snapshot
+ragtrace snapshot list     # List snapshots
+ragtrace run               # Start API server
 ```
 
 ### 🌐 API Endpoints
@@ -196,7 +196,7 @@ GET    /api/snapshots                     # List snapshots
 GET    /api/snapshots/{id1}/compare/{id2} # Compare snapshots
 ```
 
-Visit `http://localhost:8000/docs` after running `ragdebug run` for interactive API documentation.
+Visit `http://localhost:8000/docs` after running `ragtrace run` for interactive API documentation.
 
 ## 🏗️ Architecture
 
@@ -291,29 +291,29 @@ Check out the `examples/` directory for complete working examples:
 ### 1. Debug Failed Queries
 ```bash
 # See exactly why your RAG pipeline failed
-ragdebug trace last
+ragtrace show last
 ```
 
 ### 2. Track Costs
 ```bash
 # Monitor spending per query
-ragdebug list --sort-by cost
+ragtrace list --sort-by cost
 ```
 
 ### 3. Identify Retrieval Issues
 ```python
 # Check which documents were retrieved
-session = debugger.get_latest_session()
+session = tracer.get_latest_session()
 print(session.retrieval_event.chunks)
 ```
 
 ### 4. Regression Testing
 ```bash
 # Save baseline
-ragdebug snapshot save "v1-baseline"
+ragtrace snapshot save "v1-baseline"
 
 # Compare after changes
-ragdebug snapshot compare <snapshot-id-1> <snapshot-id-2>
+ragtrace snapshot compare <snapshot-id-1> <snapshot-id-2>
 ```
 
 ## 🤝 Contributing
@@ -339,9 +339,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/rag-debugger/issues)
+- **Issues**: [GitHub Issues](https://github.com/yourusername/ragtrace/issues)
 - **Documentation**: See [examples/](examples/) directory
-- **API Docs**: Run `ragdebug run` and visit `http://localhost:8000/docs`
+- **API Docs**: Run `ragtrace run` and visit `http://localhost:8000/docs`
 
 ## 🗺️ Roadmap
 
@@ -359,10 +359,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [ ] Cost optimization suggestions
 - [ ] Quality scoring
 - [ ] Team collaboration features
-- [ ] Agent tracing support
-- [ ] Cost optimization suggestions
-- [ ] Quality scoring
-- [ ] Team collaboration features
 
 ### v1.0.0
 - [ ] Cloud mode
@@ -372,7 +368,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## ⭐ Star History
 
-If you find RAG Debugger useful, please consider giving it a star! ⭐
+If you find RAGTrace useful, please consider giving it a star! ⭐
 
 ---
 

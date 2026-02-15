@@ -12,15 +12,19 @@ readme_file = Path(__file__).parent / "README.md"
 long_description = readme_file.read_text() if readme_file.exists() else ""
 
 setup(
-    name="rag-debugger",
-    version="0.1.0",
-    description="DevTools for Retrieval-Augmented Generation",
+    name="ragtrace",
+    version="0.2.0",
+    description="Observability and tracing for Retrieval-Augmented Generation pipelines",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Sabyasachi Ghosh",
     author_email="",
-    url="https://github.com/yourusername/rag-debugger",
+    url="https://github.com/yourusername/ragtrace",
     packages=find_packages(exclude=["tests", "examples"]),
+    include_package_data=True,
+    package_data={
+        "ui": ["*.html", "*.css", "*.js"],
+    },
     python_requires=">=3.9",
     install_requires=[
         "fastapi>=0.109.0",
@@ -45,7 +49,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "ragdebug=cli.main:cli",
+            "ragtrace=cli.main:cli",
         ],
     },
     classifiers=[
@@ -62,7 +66,7 @@ setup(
     ],
     keywords="rag llm debugging retrieval-augmented-generation langchain openai",
     project_urls={
-        "Bug Reports": "https://github.com/yourusername/rag-debugger/issues",
-        "Source": "https://github.com/yourusername/rag-debugger",
+        "Bug Reports": "https://github.com/yourusername/ragtrace/issues",
+        "Source": "https://github.com/yourusername/ragtrace",
     },
 )
