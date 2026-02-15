@@ -39,7 +39,7 @@ class Database:
     Uses JSON for storing complex objects in a simple schema.
     """
     
-    def __init__(self, db_path: str = "~/.ragdebug/ragdebug.db"):
+    def __init__(self, db_path: str = "~/.ragtrace/ragtrace.db"):
         """
         Initialize database connection.
         
@@ -518,7 +518,7 @@ class Database:
 _db_instance: Optional[Database] = None
 
 
-def get_db(db_path: str = "~/.ragdebug/ragdebug.db") -> Database:
+def get_db(db_path: str = "~/.ragtrace/ragtrace.db") -> Database:
     """
     Get or create global database instance.
     
