@@ -228,7 +228,8 @@ async function loadSessions() {
 
     try {
         const data = await api.getSessions(100, 0);
-        STATE.sessions = data.sessions || [];
+        // API returns array directly, not wrapped in object
+        STATE.sessions = Array.isArray(data) ? data : (data.sessions || []);
 
         if (STATE.sessions.length === 0) {
             container.innerHTML = `
@@ -259,10 +260,12 @@ function filterAndSortSessions() {
     // Apply search filter
     if (STATE.searchQuery) {
         const query = STATE.searchQuery.toLowerCase();
-        filtered = filtered.filter(session => 
-            session.session_id.toLowerCase().includes(query) ||
-            (session.metadata && JSON.stringify(session.metadata).toLowerCase().includes(query))
-        );
+        filtered = filtered.filter(session => {
+            const sessionId = session.id || session.session_id || '';
+            return sessionId.toLowerCase().includes(query) ||
+                (session.query && session.query.toLowerCase().includes(query)) ||
+                (session.model && session.model.toLowerCase().includes(query));
+        });
     }
 
     // Apply sorting
@@ -273,10 +276,11 @@ function filterAndSortSessions() {
             case 'cost':
                 return (b.total_cost || 0) - (a.total_cost || 0);
             case 'duration':
-                const durationA = a.ended_at ? 
-                    new Date(a.ended_at) - new Date(a.created_at) : 0;
-                const durationB = b.ended_at ? 
-                    new Date(b.ended_at) - new Date(b.created_at) : 0;
+                // Use total_duration_ms or calculate from completed_at
+                const durationA = a.total_duration_ms || 
+                    (a.completed_at ? new Date(a.completed_at) - new Date(a.created_at) : 0);
+                const durationB = b.total_duration_ms || 
+                    (b.completed_at ? new Date(b.completed_at) - new Date(b.created_at) : 0);
                 return durationB - durationA;
             default:
                 return 0;
@@ -300,17 +304,20 @@ function renderSessions(sessions) {
         return;
     }
 
-    container.innerHTML = sessions.map(session => `
-        <div class="session-card" onclick="viewSession('${session.session_id}')">
+    container.innerHTML = sessions.map(session => {
+        // API returns 'id', UI expects 'session_id'
+        const sessionId = session.id || session.session_id;
+        return `
+        <div class="session-card" onclick="viewSession('${sessionId}')">
             <div class="session-card-icon">${getSessionIcon(session)}</div>
             <div class="session-card-content">
                 <div class="session-card-header">
-                    <div class="session-card-title">${session.session_id}</div>
+                    <div class="session-card-title">${sessionId}</div>
                 </div>
                 <div class="session-card-meta">
                     <span>📅 ${formatDate(session.created_at)}</span>
                     <span>⏱️ ${formatDuration(session)}</span>
-                    ${session.ended_at ? '<span class="text-success">✓ Completed</span>' : '<span class="text-info">⟳ Active</span>'}
+                    ${session.completed_at ? '<span class="text-success">✓ Completed</span>' : '<span class="text-info">⟳ Active</span>'}
                 </div>
                 <div class="session-card-stats">
                     <div class="stat">
@@ -318,26 +325,23 @@ function renderSessions(sessions) {
                         <div class="stat-value cost">$${(session.total_cost || 0).toFixed(6)}</div>
                     </div>
                     <div class="stat">
-                        <div class="stat-label">Events</div>
-                        <div class="stat-value events">${session.event_count || 0}</div>
+                        <div class="stat-label">Duration</div>
+                        <div class="stat-value">${session.total_duration_ms || 0}ms</div>
                     </div>
                     <div class="stat">
-                        <div class="stat-label">Input Tokens</div>
-                        <div class="stat-value">${formatNumber(session.total_input_tokens || 0)}</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-label">Output Tokens</div>
-                        <div class="stat-value">${formatNumber(session.total_output_tokens || 0)}</div>
+                        <div class="stat-label">Model</div>
+                        <div class="stat-value">${session.model || 'N/A'}</div>
                     </div>
                 </div>
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 function getSessionIcon(session) {
     if (session.error_count > 0) return '⚠️';
-    if (!session.ended_at) return '▶️';
+    // API uses 'completed_at', not 'ended_at'
+    if (!session.completed_at) return '▶️';
     return '✅';
 }
 
@@ -381,12 +385,13 @@ async function loadTimeline(sessionId) {
 
 function renderSessionInfo(session, costData) {
     const infoEl = document.getElementById('session-info');
+    const sessionId = session.id || session.session_id;
     
     infoEl.innerHTML = `
         <div class="session-info-grid">
             <div class="stat">
                 <div class="stat-label">Session ID</div>
-                <div class="stat-value text-sm font-mono">${session.session_id}</div>
+                <div class="stat-value text-sm font-mono">${sessionId}</div>
             </div>
             <div class="stat">
                 <div class="stat-label">Created</div>
@@ -398,17 +403,17 @@ function renderSessionInfo(session, costData) {
             </div>
             <div class="stat">
                 <div class="stat-label">Status</div>
-                <div class="stat-value text-sm ${session.ended_at ? 'text-success' : 'text-info'}">
-                    ${session.ended_at ? 'Completed' : 'Active'}
+                <div class="stat-value text-sm ${session.completed_at ? 'text-success' : 'text-info'}">
+                    ${session.completed_at ? 'Completed' : 'Active'}
                 </div>
             </div>
             <div class="stat">
                 <div class="stat-label">Total Cost</div>
-                <div class="stat-value cost">$${costData.total_cost.toFixed(6)}</div>
+                <div class="stat-value cost">$${(costData.total_cost || 0).toFixed(6)}</div>
             </div>
             <div class="stat">
-                <div class="stat-label">Events</div>
-                <div class="stat-value">${session.event_count || 0}</div>
+                <div class="stat-label">Model</div>
+                <div class="stat-value">${session.model || 'N/A'}</div>
             </div>
             <div class="stat">
                 <div class="stat-label">Input Tokens</div>
@@ -756,10 +761,20 @@ function formatDateTime(dateString) {
 }
 
 function formatDuration(session) {
-    if (!session.ended_at) return 'In progress';
+    // Use total_duration_ms if available, otherwise calculate from timestamps
+    if (session.total_duration_ms) {
+        const ms = session.total_duration_ms;
+        if (ms < 1000) return `${ms}ms`;
+        if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+        if (ms < 3600000) return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+        return `${Math.floor(ms / 3600000)}h ${Math.floor((ms % 3600000) / 60000)}m`;
+    }
+    
+    // API uses 'completed_at', not 'ended_at'
+    if (!session.completed_at) return 'In progress';
     
     const start = new Date(session.created_at);
-    const end = new Date(session.ended_at);
+    const end = new Date(session.completed_at);
     const diff = end - start;
     
     if (diff < 1000) return `${diff}ms`;
