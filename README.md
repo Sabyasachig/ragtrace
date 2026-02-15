@@ -12,7 +12,7 @@ RAG Debugger is a lightweight debugging layer for RAG (Retrieval-Augmented Gener
 
 - 🔍 **Event Capture** - Automatically intercepts retrieval, prompt, and generation events
 - 💰 **Cost Tracking** - Accurate token counting and cost estimation per query
-- 📊 **Timeline View** - Visualize the flow from retrieval → prompt → generation
+- 📊 **Interactive Web UI** - Modern timeline view with charts, filters, and event inspection
 - 🔧 **CLI Tool** - Developer-friendly command-line interface
 - 🌐 **REST API** - Query and analyze sessions programmatically
 - 🧪 **Regression Testing** - Snapshot and compare RAG outputs
@@ -70,7 +70,7 @@ result = chain.run("What is RAG?")
 ### View Results
 
 ```bash
-# View latest session
+# View latest session in CLI
 ragdebug trace last
 
 # List all sessions
@@ -79,9 +79,50 @@ ragdebug list
 # Export to JSON
 ragdebug export <session-id> > session.json
 
-# Start API server
+# Start API server (for Web UI)
 ragdebug run
+
+# Or start both servers for full Web UI experience
+uvicorn api.main:app --port 8000 &  # API server
+python ui/serve.py                   # UI server → http://localhost:3000
 ```
+
+## 🌐 Web UI
+
+RAG Debugger includes a modern web interface for visualizing and analyzing your RAG pipelines:
+
+### Start the Servers
+
+```bash
+# Terminal 1: Start API server
+cd rag-debugger
+source venv/bin/activate
+uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 2: Start UI server
+cd rag-debugger
+python ui/serve.py
+```
+
+Then open **http://localhost:3000** in your browser.
+
+### Web UI Features
+
+- **📋 Sessions View** - Browse all captured RAG sessions with search and filtering
+- **📊 Timeline View** - Interactive timeline showing retrieval → prompt → generation flow
+- **📈 Performance Charts** - Waterfall chart for event durations, cost breakdown by component
+- **🔍 Event Inspector** - Click any event to see full details including tokens, costs, and data
+- **🎯 Smart Filters** - Filter events by type, duration, and cost
+- **📤 Export Tools** - Export session data as JSON or CSV, copy to clipboard
+
+### Quick UI Guide
+
+1. **Sessions Tab**: View all RAG sessions, sorted by recent activity
+2. **Timeline Tab**: Click on any session to see detailed event timeline
+3. **Click Events**: Click timeline events to inspect full details
+4. **Apply Filters**: Use dropdowns to filter by event type or performance metrics
+5. **Export Data**: Use export buttons to download session data
+
 
 ## 📊 Example Output
 
@@ -112,8 +153,19 @@ ragdebug run
 - **Session Management** - Store and retrieve debugging sessions
 - **CLI Tool** - Rich formatted terminal output
 - **REST API** - FastAPI server with OpenAPI docs
-- **JSON Export** - Export sessions for analysis
+- **Web UI** - Interactive timeline with charts and event inspection
+- **JSON/CSV Export** - Export sessions for analysis
 - **Snapshot Testing** - Save and compare pipeline outputs
+
+### 🎨 Web UI Features
+
+- **Sessions Dashboard** - View all sessions with search and sort
+- **Interactive Timeline** - Click events to inspect details
+- **Performance Waterfall** - Visualize event durations side-by-side
+- **Cost Breakdown Chart** - See spending by component (embeddings, prompts, generation)
+- **Smart Filters** - Filter by event type, duration, or cost
+- **Real-time Updates** - WebSocket support for live session monitoring
+- **Export Tools** - Download as JSON, CSV, or copy to clipboard
 
 ### 🎨 CLI Commands
 
@@ -160,6 +212,11 @@ rag-debugger/
 ├── api/               # REST API (FastAPI)
 │   ├── main.py        # FastAPI application
 │   └── routes.py      # API endpoints
+├── ui/                # Web UI (HTML/CSS/JS)
+│   ├── index.html     # Main UI page
+│   ├── app.js         # Frontend application logic
+│   ├── styles.css     # UI styling
+│   └── serve.py       # Development server
 ├── cli/               # Command-line interface
 │   └── main.py        # Click CLI commands
 ├── examples/          # Usage examples
@@ -288,13 +345,20 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🗺️ Roadmap
 
-### v0.2.0 (Coming Soon)
-- [ ] Web UI for timeline visualization
+### v0.2.0 (Current)
+- [x] Web UI for timeline visualization
+- [x] Interactive event inspection
+- [x] Performance charts (waterfall, cost breakdown)
+- [x] Export tools (JSON, CSV)
 - [ ] Advanced regression testing
 - [ ] LlamaIndex integration
 - [ ] Prompt versioning
 
-### v0.3.0
+### v0.3.0 (Planned)
+- [ ] Agent tracing support
+- [ ] Cost optimization suggestions
+- [ ] Quality scoring
+- [ ] Team collaboration features
 - [ ] Agent tracing support
 - [ ] Cost optimization suggestions
 - [ ] Quality scoring

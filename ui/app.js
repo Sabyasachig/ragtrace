@@ -1,10 +1,9 @@
-
 /* ========================================
    Configuration & State
    ======================================== */
 
 const CONFIG = {
-    apiBaseUrl: 'http://localhost:8000/api',  // Fixed: /api not /api/v1
+    apiBaseUrl: 'http://localhost:8000/api',  // API server port
     wsUrl: 'ws://localhost:8000/ws',
     refreshInterval: 5000,
     toastDuration: 4000
@@ -13,6 +12,9 @@ const CONFIG = {
 const STATE = {
     currentView: 'sessions',
     currentSession: null,
+    currentSessionData: null,
+    currentEvents: [],
+    currentCostData: null,
     sessions: [],
     searchQuery: '',
     sortBy: 'created_at',
@@ -199,7 +201,7 @@ function switchView(viewName) {
     loadViewData(viewName);
 }
 
-function loadViewData(viewName) {
+async function loadViewData(viewName) {
     switch (viewName) {
         case 'sessions':
             loadSessions();
@@ -207,6 +209,29 @@ function loadViewData(viewName) {
         case 'timeline':
             if (STATE.currentSession) {
                 loadTimeline(STATE.currentSession);
+            } else {
+                // Auto-select most recent session if none selected
+                if (STATE.sessions.length === 0) {
+                    await loadSessions();
+                }
+                if (STATE.sessions.length > 0) {
+                    const mostRecentSession = STATE.sessions[0];
+                    const sessionId = mostRecentSession.id || mostRecentSession.session_id;
+                    STATE.currentSession = sessionId;
+                    loadTimeline(sessionId);
+                } else {
+                    // Show empty state if no sessions
+                    const timelineEl = document.getElementById('timeline');
+                    if (timelineEl) {
+                        timelineEl.innerHTML = `
+                            <div class="empty-state">
+                                <span class="empty-icon">📊</span>
+                                <h3>No Sessions Available</h3>
+                                <p>Create a session first to view timeline data</p>
+                            </div>
+                        `;
+                    }
+                }
             }
             break;
         case 'regression':
@@ -373,11 +398,19 @@ async function loadTimeline(sessionId) {
             api.getSessionCost(sessionId)
         ]);
 
+        // Store in STATE for filtering and export
+        STATE.currentSessionData = sessionData;
+        STATE.currentEvents = eventsData.events || eventsData || [];
+        STATE.currentCostData = costData;
+
         renderSessionInfo(sessionData, costData);
-        renderTimeline(eventsData.events || []);
+        renderTimeline(STATE.currentEvents);
+        renderWaterfallChart(STATE.currentEvents);
+        renderCostChart(costData);
         
         detailsEl.innerHTML = '<h3>Event Details</h3><p class="placeholder">Select an event to view details</p>';
     } catch (error) {
+        console.error('Timeline load error:', error);
         infoEl.innerHTML = `<p class="text-danger">Failed to load session data: ${error.message}</p>`;
         timelineEl.innerHTML = `<p class="text-danger">Failed to load events: ${error.message}</p>`;
     }
@@ -444,19 +477,24 @@ function renderTimeline(events) {
     // Sort events by timestamp
     events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    timelineEl.innerHTML = events.map(event => `
-        <div class="timeline-event" data-event-id="${event.event_id}" onclick="showEventDetails('${event.event_id}')">
+    timelineEl.innerHTML = events.map(event => {
+        const eventId = event.id || event.event_id;
+        return `
+        <div class="timeline-event" data-event-id="${eventId}" onclick="showEventDetails('${eventId}')">
             <div class="timeline-event-time">${formatTime(event.timestamp)}</div>
             <div class="timeline-event-content">
                 <div class="timeline-event-type">${getEventIcon(event.event_type)} ${event.event_type}</div>
                 <div class="timeline-event-details">${getEventSummary(event)}</div>
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 function getEventIcon(eventType) {
     const icons = {
+        'retrieval': '🔍',
+        'prompt': '📝',
+        'generation': '🚀',
         'llm_start': '🚀',
         'llm_end': '✓',
         'llm_error': '⚠️',
@@ -473,8 +511,22 @@ function getEventIcon(eventType) {
 }
 
 function getEventSummary(event) {
-    const data = event.event_data || {};
+    const data = event.data || event.event_data || {};
     
+    // Handle new event types
+    if (event.event_type === 'retrieval') {
+        return `Retrieved ${data.chunks?.length || 0} chunks • ${data.duration_ms || 0}ms • $${(data.embedding_cost || 0).toFixed(6)}`;
+    }
+    
+    if (event.event_type === 'prompt') {
+        return `${data.token_count || 0} tokens • Template: ${data.template_name || 'default'}`;
+    }
+    
+    if (event.event_type === 'generation') {
+        return `${data.input_tokens || 0} → ${data.output_tokens || 0} tokens • ${data.duration_ms || 0}ms • $${(data.cost || 0).toFixed(6)}`;
+    }
+    
+    // Legacy event types
     if (event.event_type === 'llm_end') {
         return `Generated ${data.output_tokens || 0} tokens • $${(data.cost || 0).toFixed(6)}`;
     }
@@ -490,7 +542,7 @@ function getEventSummary(event) {
     return JSON.stringify(data).slice(0, 100);
 }
 
-async function showEventDetails(eventId) {
+function showEventDetails(eventId) {
     // Remove selection from all events
     document.querySelectorAll('.timeline-event').forEach(el => {
         el.classList.remove('selected');
@@ -501,21 +553,22 @@ async function showEventDetails(eventId) {
 
     const detailsEl = document.getElementById('event-details');
     
-    // Find event in current session
-    const eventsData = await api.getEvents(STATE.currentSession);
-    const event = eventsData.events.find(e => e.event_id === eventId);
+    // Find event in STATE.currentEvents
+    const event = STATE.currentEvents.find(e => (e.id || e.event_id) === eventId);
     
     if (!event) {
         detailsEl.innerHTML = '<h3>Event Details</h3><p class="text-danger">Event not found</p>';
         return;
     }
+    
+    const eventData = event.data || event.event_data || {};
 
     detailsEl.innerHTML = `
         <h3>Event Details</h3>
         <div class="event-details-content">
             <div class="detail-group">
                 <div class="detail-label">Event ID</div>
-                <div class="detail-value">${event.event_id}</div>
+                <div class="detail-value">${event.id || event.event_id}</div>
             </div>
             <div class="detail-group">
                 <div class="detail-label">Type</div>
@@ -527,20 +580,193 @@ async function showEventDetails(eventId) {
             </div>
             <div class="detail-group">
                 <div class="detail-label">Duration</div>
-                <div class="detail-value">${event.duration ? `${event.duration.toFixed(3)}s` : 'N/A'}</div>
+                <div class="detail-value">${eventData.duration_ms ? `${eventData.duration_ms}ms` : 'N/A'}</div>
             </div>
-            ${event.cost ? `
+            ${eventData.cost ? `
             <div class="detail-group">
                 <div class="detail-label">Cost</div>
-                <div class="detail-value cost">$${event.cost.toFixed(6)}</div>
+                <div class="detail-value cost">$${eventData.cost.toFixed(6)}</div>
             </div>
             ` : ''}
             <div class="detail-group">
                 <div class="detail-label">Event Data</div>
-                <div class="detail-value">${JSON.stringify(event.event_data, null, 2)}</div>
+                <div class="detail-value"><pre>${JSON.stringify(eventData, null, 2)}</pre></div>
             </div>
         </div>
     `;
+}
+
+/* ========================================
+   Chart Rendering Functions
+   ======================================== */
+
+function renderWaterfallChart(events) {
+    const canvas = document.getElementById('waterfall-chart');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    
+    // Destroy existing chart if it exists
+    if (window.waterfallChart) {
+        window.waterfallChart.destroy();
+    }
+    
+    if (events.length === 0) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'var(--text-secondary)';
+        ctx.font = '14px var(--font-family)';
+        ctx.textAlign = 'center';
+        ctx.fillText('No events to display', canvas.width / 2, canvas.height / 2);
+        return;
+    }
+    
+    // Create horizontal bar chart showing event durations
+    window.waterfallChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: events.map((e, i) => `${i + 1}. ${e.event_type || 'Unknown'}`),
+            datasets: [{
+                label: 'Duration (ms)',
+                data: events.map(e => {
+                    const data = e.data || {};
+                    return data.duration_ms || 0;
+                }),
+                backgroundColor: events.map(e => getEventColor(e.event_type)),
+                borderWidth: 1,
+                borderColor: 'rgba(0, 0, 0, 0.1)'
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const event = events[context.dataIndex];
+                            const eventData = event.data || {};
+                            return [
+                                `Duration: ${eventData.duration_ms || 0}ms`,
+                                `Cost: $${(eventData.cost || 0).toFixed(6)}`,
+                                `Type: ${event.event_type || 'Unknown'}`
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: { 
+                        display: true, 
+                        text: 'Duration (ms)',
+                        color: 'var(--text-secondary)'
+                    },
+                    grid: {
+                        color: 'var(--border-color)'
+                    },
+                    ticks: {
+                        color: 'var(--text-secondary)'
+                    }
+                },
+                y: {
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        color: 'var(--text-secondary)',
+                        font: {
+                            size: 10
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderCostChart(costData) {
+    const canvas = document.getElementById('cost-chart');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    
+    // Destroy existing chart if it exists
+    if (window.costChart) {
+        window.costChart.destroy();
+    }
+    
+    const inputCost = costData.input_cost || 0;
+    const outputCost = costData.output_cost || 0;
+    const embeddingCost = costData.embedding_cost || 0;
+    
+    if (inputCost === 0 && outputCost === 0 && embeddingCost === 0) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'var(--text-secondary)';
+        ctx.font = '14px var(--font-family)';
+        ctx.textAlign = 'center';
+        ctx.fillText('No cost data', canvas.width / 2, canvas.height / 2);
+        return;
+    }
+    
+    window.costChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Input Tokens', 'Output Tokens', 'Embeddings'],
+            datasets: [{
+                data: [inputCost, outputCost, embeddingCost],
+                backgroundColor: [
+                    '#3b82f6', // Blue
+                    '#10b981', // Green
+                    '#8b5cf6'  // Purple
+                ],
+                borderWidth: 2,
+                borderColor: 'var(--bg-primary)'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: 'var(--text-secondary)',
+                        padding: 10
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                            return `${label}: $${value.toFixed(6)} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function getEventColor(eventType) {
+    const colors = {
+        'retrieval': '#3b82f6',     // Blue
+        'prompt': '#8b5cf6',        // Purple
+        'generation': '#10b981',    // Green
+        'llm_start': '#f59e0b',     // Orange
+        'llm_end': '#10b981',       // Green
+        'chain_start': '#06b6d4',   // Cyan
+        'chain_end': '#10b981',     // Green
+        'tool_start': '#f59e0b',    // Orange
+        'tool_end': '#10b981',      // Green
+        'retriever_start': '#3b82f6', // Blue
+        'retriever_end': '#10b981'  // Green
+    };
+    return colors[eventType] || '#6b7280'; // Gray default
 }
 
 /* ========================================
@@ -657,6 +883,151 @@ function savePrompt() {
     showToast('Success', 'Prompt registered successfully', 'success');
     closeModal();
     loadPrompts();
+}
+
+/* ========================================
+   Event Filtering Functions
+   ======================================== */
+
+function filterEvents() {
+    if (!STATE.currentEvents || STATE.currentEvents.length === 0) {
+        return;
+    }
+    
+    const eventType = document.getElementById('event-type-filter')?.value || '';
+    const minDuration = parseFloat(document.getElementById('min-duration-filter')?.value) || 0;
+    const maxCost = parseFloat(document.getElementById('max-cost-filter')?.value) || Infinity;
+    
+    let filtered = [...STATE.currentEvents];
+    
+    if (eventType) {
+        filtered = filtered.filter(e => e.event_type === eventType);
+    }
+    
+    if (minDuration > 0) {
+        filtered = filtered.filter(e => {
+            const data = e.data || {};
+            return (data.duration_ms || 0) >= minDuration;
+        });
+    }
+    
+    if (maxCost < Infinity) {
+        filtered = filtered.filter(e => {
+            const data = e.data || {};
+            return (data.cost || 0) <= maxCost;
+        });
+    }
+    
+    renderTimeline(filtered);
+    renderWaterfallChart(filtered);
+    
+    showToast('Filters Applied', `Showing ${filtered.length} of ${STATE.currentEvents.length} events`, 'info');
+}
+
+function clearFilters() {
+    // Reset filter inputs
+    const eventTypeFilter = document.getElementById('event-type-filter');
+    const minDurationFilter = document.getElementById('min-duration-filter');
+    const maxCostFilter = document.getElementById('max-cost-filter');
+    
+    if (eventTypeFilter) eventTypeFilter.value = '';
+    if (minDurationFilter) minDurationFilter.value = '';
+    if (maxCostFilter) maxCostFilter.value = '';
+    
+    // Re-render with all events
+    if (STATE.currentEvents) {
+        renderTimeline(STATE.currentEvents);
+        renderWaterfallChart(STATE.currentEvents);
+        showToast('Filters Cleared', 'Showing all events', 'success');
+    }
+}
+
+/* ========================================
+   Export Functions
+   ======================================== */
+
+function exportSessionJSON() {
+    if (!STATE.currentSessionData || !STATE.currentEvents) {
+        showToast('Error', 'No session data to export', 'error');
+        return;
+    }
+    
+    const data = {
+        session: STATE.currentSessionData,
+        events: STATE.currentEvents,
+        exported_at: new Date().toISOString(),
+        version: '0.2.0'
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { 
+        type: 'application/json' 
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const sessionId = STATE.currentSessionData.id || STATE.currentSessionData.session_id || 'session';
+    a.download = `ragdebug-${sessionId.slice(0, 8)}-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showToast('Success', 'Session exported as JSON', 'success');
+}
+
+function exportSessionCSV() {
+    if (!STATE.currentEvents || STATE.currentEvents.length === 0) {
+        showToast('Error', 'No events to export', 'error');
+        return;
+    }
+    
+    // Create CSV header
+    const headers = ['Event ID', 'Type', 'Timestamp', 'Duration (ms)', 'Cost ($)', 'Data'];
+    
+    // Create CSV rows
+    const rows = STATE.currentEvents.map(e => {
+        const eventData = e.data || e.event_data || {};
+        return [
+            e.id || e.event_id || '',
+            e.event_type || '',
+            e.timestamp ? new Date(e.timestamp).toISOString() : '',
+            eventData.duration_ms || 0,
+            (eventData.cost || 0).toFixed(6),
+            JSON.stringify(eventData).replace(/"/g, '""')
+        ];
+    });
+    
+    // Combine into CSV string
+    const csv = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+    
+    // Download
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const sessionId = STATE.currentSession || 'session';
+    a.download = `ragdebug-events-${sessionId.slice(0, 8)}-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showToast('Success', 'Events exported as CSV', 'success');
+}
+
+function copyToClipboard() {
+    if (!STATE.currentEvents || STATE.currentEvents.length === 0) {
+        showToast('Error', 'No events to copy', 'error');
+        return;
+    }
+    
+    const text = JSON.stringify(STATE.currentEvents, null, 2);
+    
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Success', `Copied ${STATE.currentEvents.length} events to clipboard`, 'success');
+    }).catch(err => {
+        showToast('Error', 'Failed to copy to clipboard', 'error');
+        console.error('Clipboard error:', err);
+    });
 }
 
 /* ========================================
@@ -858,3 +1229,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     console.log('RAG Debugger UI initialized');
 });
+
+/* ========================================
+   Expose Functions to Global Scope
+   (Required for onclick handlers in module)
+   ======================================== */
+
+window.viewSession = viewSession;
+window.showEventDetails = showEventDetails;
+window.filterEvents = filterEvents;
+window.clearFilters = clearFilters;
+window.exportSessionJSON = exportSessionJSON;
+window.exportSessionCSV = exportSessionCSV;
+window.copyToClipboard = copyToClipboard;

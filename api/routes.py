@@ -209,6 +209,55 @@ async def log_event(session_id: str, event: StoredEvent):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/sessions/{session_id}/events", response_model=List[StoredEvent])
+async def get_session_events(session_id: str):
+    """
+    Get all events for a session as StoredEvent objects.
+    
+    Args:
+        session_id: Session ID
+        
+    Returns:
+        List of StoredEvent objects for the session
+    """
+    try:
+        db = get_db()
+        
+        # Verify session exists
+        session = db.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+        
+        # Query events directly from database
+        cursor = db.conn.cursor()
+        cursor.execute("""
+            SELECT id, session_id, event_type, timestamp, data
+            FROM events 
+            WHERE session_id = ? 
+            ORDER BY timestamp ASC
+        """, (session_id,))
+        
+        events = []
+        for row in cursor.fetchall():
+            import json
+            event = StoredEvent(
+                id=row["id"],
+                session_id=row["session_id"],
+                event_type=row["event_type"],
+                timestamp=row["timestamp"],
+                data=json.loads(row["data"])
+            )
+            events.append(event)
+        
+        logger.info(f"Retrieved {len(events)} events for session {session_id}")
+        return events
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting events for session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Cost endpoints
 
 @router.get("/sessions/{session_id}/costs", response_model=CostBreakdown)
@@ -237,6 +286,20 @@ async def get_costs(session_id: str):
     except Exception as e:
         logger.error(f"Error getting costs for session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sessions/{session_id}/cost", response_model=CostBreakdown)
+async def get_session_cost(session_id: str):
+    """
+    Get cost breakdown for a session (singular endpoint alias).
+    
+    Args:
+        session_id: Session ID
+        
+    Returns:
+        Cost breakdown
+    """
+    return await get_costs(session_id)
 
 
 # Snapshot endpoints
