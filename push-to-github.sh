@@ -8,7 +8,7 @@ echo ""
 
 # Check if we're in the right directory
 if [ ! -f "pyproject.toml" ]; then
-    echo "❌ Error: Please run this from the rag-debugger directory"
+    echo "❌ Error: Please run this from the ragtrace directory"
     exit 1
 fi
 
@@ -25,10 +25,10 @@ echo ""
 echo "✅ GitHub username: $GITHUB_USERNAME"
 echo ""
 
-# Ask for repository name (default: rag-debugger)
-echo "📝 Enter repository name (default: rag-debugger):"
+# Ask for repository name (default: ragtrace)
+echo "📝 Enter repository name (default: ragtrace):"
 read -r REPO_NAME
-REPO_NAME=${REPO_NAME:-rag-debugger}
+REPO_NAME=${REPO_NAME:-ragtrace}
 
 echo "✅ Repository name: $REPO_NAME"
 echo ""
