@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Debugger - DevTools for RAG Pipelines</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-icon">🔍</span>
+                <h1 class="logo-text">RAG Debugger</h1>
+            </div>
+            <nav class="nav">
+                <button class="nav-btn active" data-view="sessions">Sessions</button>
+                <button class="nav-btn" data-view="timeline">Timeline</button>
+                <button class="nav-btn" data-view="regression">Regression</button>
+                <button class="nav-btn" data-view="prompts">Prompts</button>
+            </nav>
+            <div class="header-actions">
+                <button class="btn-icon" id="refresh-btn" title="Refresh">
+                    <span>↻</span>
+                </button>
+                <button class="btn-icon" id="theme-toggle" title="Toggle theme">
+                    <span id="theme-icon">🌙</span>
+                </button>
+                <span class="status-indicator" id="connection-status">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Connected</span>
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Sessions View -->
+        <div id="sessions-view" class="view active">
+            <div class="view-header">
+                <h2>Recent Sessions</h2>
+                <div class="view-actions">
+                    <input 
+                        type="search" 
+                        id="search-input" 
+                        placeholder="Search sessions..." 
+                        class="search-input"
+                    >
+                    <select id="sort-select" class="sort-select">
+                        <option value="created_at">Latest First</option>
+                        <option value="cost">Highest Cost</option>
+                        <option value="duration">Longest Duration</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="sessions-container">
+                <div id="sessions-list" class="sessions-list">
+                    <!-- Sessions will be loaded here -->
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading sessions...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Timeline View -->
+        <div id="timeline-view" class="view">
+            <div class="view-header">
+                <button class="btn-back" id="back-to-sessions">
+                    ← Back to Sessions
+                </button>
+                <h2 id="timeline-title">Session Timeline</h2>
+            </div>
+
+            <div class="timeline-container">
+                <div id="session-info" class="session-info">
+                    <!-- Session details will be loaded here -->
+                </div>
+
+                <div id="timeline" class="timeline">
+                    <!-- Timeline visualization will be rendered here -->
+                </div>
+
+                <div id="event-details" class="event-details">
+                    <h3>Event Details</h3>
+                    <p class="placeholder">Select an event to view details</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Regression View -->
+        <div id="regression-view" class="view">
+            <div class="view-header">
+                <h2>Regression Testing</h2>
+                <button class="btn-primary" id="new-snapshot-btn">
+                    + New Snapshot
+                </button>
+            </div>
+
+            <div class="regression-container">
+                <div id="snapshots-list" class="snapshots-list">
+                    <!-- Snapshots will be loaded here -->
+                    <div class="empty-state">
+                        <span class="empty-icon">📸</span>
+                        <h3>No Snapshots Yet</h3>
+                        <p>Create snapshots to track changes over time</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prompts View -->
+        <div id="prompts-view" class="view">
+            <div class="view-header">
+                <h2>Prompt Versions</h2>
+                <button class="btn-primary" id="new-prompt-btn">
+                    + Register Prompt
+                </button>
+            </div>
+
+            <div class="prompts-container">
+                <div id="prompts-list" class="prompts-list">
+                    <!-- Prompts will be loaded here -->
+                    <div class="empty-state">
+                        <span class="empty-icon">📝</span>
+                        <h3>No Prompts Registered</h3>
+                        <p>Register prompt templates to track versions</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <span>RAG Debugger v0.2.0</span>
+            <span class="footer-separator">•</span>
+            <a href="https://github.com/yourusername/rag-debugger" target="_blank">GitHub</a>
+            <span class="footer-separator">•</span>
+            <a href="/docs" target="_blank">API Docs</a>
+        </div>
+    </footer>
+
+    <!-- Modals -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title">Modal Title</h3>
+                <button class="modal-close" id="modal-close">×</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Modal content will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="app.js" type="module"></script>
+</body>
+</html>
