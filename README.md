@@ -201,7 +201,7 @@ Visit `http://localhost:8000/docs` after running `ragtrace run` for interactive 
 ## 🏗️ Architecture
 
 ```
-rag-debugger/
+ragtrace/
 ├── core/              # Core business logic
 │   ├── models.py      # Pydantic data models
 │   ├── storage.py     # SQLite database layer
@@ -239,8 +239,8 @@ rag-debugger/
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/rag-debugger.git
-cd rag-debugger
+git clone https://github.com/yourusername/ragtrace.git
+cd ragtrace
 
 # Install with development dependencies
 poetry install
