@@ -6,6 +6,8 @@
     <title>RAG Debugger - DevTools for RAG Pipelines</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 </head>
 <body>
     <!-- Header -->
@@ -82,6 +84,46 @@
                     <!-- Session details will be loaded here -->
                 </div>
 
+                <!-- Charts Section -->
+                <div class="charts-section">
+                    <div class="chart-card">
+                        <h3>Performance Waterfall</h3>
+                        <canvas id="waterfall-chart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Cost Breakdown</h3>
+                        <canvas id="cost-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Event Filters -->
+                <div class="filters-section">
+                    <h3>Filter Events</h3>
+                    <div class="filters">
+                        <select id="event-type-filter" onchange="filterEvents()">
+                            <option value="">All Event Types</option>
+                            <option value="retrieval">Retrieval</option>
+                            <option value="prompt">Prompt</option>
+                            <option value="generation">Generation</option>
+                            <option value="llm_start">LLM Start</option>
+                            <option value="llm_end">LLM End</option>
+                        </select>
+                        
+                        <input type="number" 
+                               id="min-duration-filter" 
+                               placeholder="Min duration (ms)"
+                               onchange="filterEvents()">
+                        
+                        <input type="number" 
+                               id="max-cost-filter" 
+                               placeholder="Max cost ($)"
+                               step="0.000001"
+                               onchange="filterEvents()">
+                        
+                        <button class="btn-secondary" onclick="clearFilters()">Clear Filters</button>
+                    </div>
+                </div>
+
                 <div id="timeline" class="timeline">
                     <!-- Timeline visualization will be rendered here -->
                 </div>
@@ -89,6 +131,22 @@
                 <div id="event-details" class="event-details">
                     <h3>Event Details</h3>
                     <p class="placeholder">Select an event to view details</p>
+                </div>
+
+                <!-- Export Section -->
+                <div class="export-section">
+                    <h3>Export Data</h3>
+                    <div class="export-buttons">
+                        <button class="btn-secondary" onclick="exportSessionJSON()">
+                            📥 Export JSON
+                        </button>
+                        <button class="btn-secondary" onclick="exportSessionCSV()">
+                            📊 Export CSV
+                        </button>
+                        <button class="btn-secondary" onclick="copyToClipboard()">
+                            📋 Copy to Clipboard
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

@@ -1,4 +1,3 @@
-
 /* ========================================
    Configuration & State
    ======================================== */
@@ -13,6 +12,9 @@ const CONFIG = {
 const STATE = {
     currentView: 'sessions',
     currentSession: null,
+    currentSessionData: null,
+    currentEvents: [],
+    currentCostData: null,
     sessions: [],
     searchQuery: '',
     sortBy: 'created_at',
@@ -373,11 +375,19 @@ async function loadTimeline(sessionId) {
             api.getSessionCost(sessionId)
         ]);
 
+        // Store in STATE for filtering and export
+        STATE.currentSessionData = sessionData;
+        STATE.currentEvents = eventsData.events || eventsData || [];
+        STATE.currentCostData = costData;
+
         renderSessionInfo(sessionData, costData);
-        renderTimeline(eventsData.events || []);
+        renderTimeline(STATE.currentEvents);
+        renderWaterfallChart(STATE.currentEvents);
+        renderCostChart(costData);
         
         detailsEl.innerHTML = '<h3>Event Details</h3><p class="placeholder">Select an event to view details</p>';
     } catch (error) {
+        console.error('Timeline load error:', error);
         infoEl.innerHTML = `<p class="text-danger">Failed to load session data: ${error.message}</p>`;
         timelineEl.innerHTML = `<p class="text-danger">Failed to load events: ${error.message}</p>`;
     }
@@ -544,6 +554,175 @@ async function showEventDetails(eventId) {
 }
 
 /* ========================================
+   Chart Rendering Functions
+   ======================================== */
+
+function renderWaterfallChart(events) {
+    const canvas = document.getElementById('waterfall-chart');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    
+    // Destroy existing chart if it exists
+    if (window.waterfallChart) {
+        window.waterfallChart.destroy();
+    }
+    
+    if (events.length === 0) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'var(--text-secondary)';
+        ctx.font = '14px var(--font-family)';
+        ctx.textAlign = 'center';
+        ctx.fillText('No events to display', canvas.width / 2, canvas.height / 2);
+        return;
+    }
+    
+    // Create horizontal bar chart showing event durations
+    window.waterfallChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: events.map((e, i) => `${i + 1}. ${e.event_type || 'Unknown'}`),
+            datasets: [{
+                label: 'Duration (ms)',
+                data: events.map(e => e.duration_ms || 0),
+                backgroundColor: events.map(e => getEventColor(e.event_type)),
+                borderWidth: 1,
+                borderColor: 'rgba(0, 0, 0, 0.1)'
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const event = events[context.dataIndex];
+                            return [
+                                `Duration: ${event.duration_ms || 0}ms`,
+                                `Cost: $${(event.cost || 0).toFixed(6)}`,
+                                `Type: ${event.event_type || 'Unknown'}`
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: { 
+                        display: true, 
+                        text: 'Duration (ms)',
+                        color: 'var(--text-secondary)'
+                    },
+                    grid: {
+                        color: 'var(--border-color)'
+                    },
+                    ticks: {
+                        color: 'var(--text-secondary)'
+                    }
+                },
+                y: {
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        color: 'var(--text-secondary)',
+                        font: {
+                            size: 10
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderCostChart(costData) {
+    const canvas = document.getElementById('cost-chart');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    
+    // Destroy existing chart if it exists
+    if (window.costChart) {
+        window.costChart.destroy();
+    }
+    
+    const inputCost = costData.input_cost || 0;
+    const outputCost = costData.output_cost || 0;
+    const embeddingCost = costData.embedding_cost || 0;
+    
+    if (inputCost === 0 && outputCost === 0 && embeddingCost === 0) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'var(--text-secondary)';
+        ctx.font = '14px var(--font-family)';
+        ctx.textAlign = 'center';
+        ctx.fillText('No cost data', canvas.width / 2, canvas.height / 2);
+        return;
+    }
+    
+    window.costChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Input Tokens', 'Output Tokens', 'Embeddings'],
+            datasets: [{
+                data: [inputCost, outputCost, embeddingCost],
+                backgroundColor: [
+                    '#3b82f6', // Blue
+                    '#10b981', // Green
+                    '#8b5cf6'  // Purple
+                ],
+                borderWidth: 2,
+                borderColor: 'var(--bg-primary)'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: 'var(--text-secondary)',
+                        padding: 10
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                            return `${label}: $${value.toFixed(6)} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function getEventColor(eventType) {
+    const colors = {
+        'retrieval': '#3b82f6',     // Blue
+        'prompt': '#8b5cf6',        // Purple
+        'generation': '#10b981',    // Green
+        'llm_start': '#f59e0b',     // Orange
+        'llm_end': '#10b981',       // Green
+        'chain_start': '#06b6d4',   // Cyan
+        'chain_end': '#10b981',     // Green
+        'tool_start': '#f59e0b',    // Orange
+        'tool_end': '#10b981',      // Green
+        'retriever_start': '#3b82f6', // Blue
+        'retriever_end': '#10b981'  // Green
+    };
+    return colors[eventType] || '#6b7280'; // Gray default
+}
+
+/* ========================================
    Regression View
    ======================================== */
 
@@ -657,6 +836,142 @@ function savePrompt() {
     showToast('Success', 'Prompt registered successfully', 'success');
     closeModal();
     loadPrompts();
+}
+
+/* ========================================
+   Event Filtering Functions
+   ======================================== */
+
+function filterEvents() {
+    if (!STATE.currentEvents || STATE.currentEvents.length === 0) {
+        return;
+    }
+    
+    const eventType = document.getElementById('event-type-filter')?.value || '';
+    const minDuration = parseFloat(document.getElementById('min-duration-filter')?.value) || 0;
+    const maxCost = parseFloat(document.getElementById('max-cost-filter')?.value) || Infinity;
+    
+    let filtered = [...STATE.currentEvents];
+    
+    if (eventType) {
+        filtered = filtered.filter(e => e.event_type === eventType);
+    }
+    
+    if (minDuration > 0) {
+        filtered = filtered.filter(e => (e.duration_ms || 0) >= minDuration);
+    }
+    
+    if (maxCost < Infinity) {
+        filtered = filtered.filter(e => (e.cost || 0) <= maxCost);
+    }
+    
+    renderTimeline(filtered);
+    renderWaterfallChart(filtered);
+    
+    showToast('Filters Applied', `Showing ${filtered.length} of ${STATE.currentEvents.length} events`, 'info');
+}
+
+function clearFilters() {
+    // Reset filter inputs
+    const eventTypeFilter = document.getElementById('event-type-filter');
+    const minDurationFilter = document.getElementById('min-duration-filter');
+    const maxCostFilter = document.getElementById('max-cost-filter');
+    
+    if (eventTypeFilter) eventTypeFilter.value = '';
+    if (minDurationFilter) minDurationFilter.value = '';
+    if (maxCostFilter) maxCostFilter.value = '';
+    
+    // Re-render with all events
+    if (STATE.currentEvents) {
+        renderTimeline(STATE.currentEvents);
+        renderWaterfallChart(STATE.currentEvents);
+        showToast('Filters Cleared', 'Showing all events', 'success');
+    }
+}
+
+/* ========================================
+   Export Functions
+   ======================================== */
+
+function exportSessionJSON() {
+    if (!STATE.currentSessionData || !STATE.currentEvents) {
+        showToast('Error', 'No session data to export', 'error');
+        return;
+    }
+    
+    const data = {
+        session: STATE.currentSessionData,
+        events: STATE.currentEvents,
+        exported_at: new Date().toISOString(),
+        version: '0.2.0'
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { 
+        type: 'application/json' 
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const sessionId = STATE.currentSessionData.id || STATE.currentSessionData.session_id || 'session';
+    a.download = `ragdebug-${sessionId.slice(0, 8)}-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showToast('Success', 'Session exported as JSON', 'success');
+}
+
+function exportSessionCSV() {
+    if (!STATE.currentEvents || STATE.currentEvents.length === 0) {
+        showToast('Error', 'No events to export', 'error');
+        return;
+    }
+    
+    // Create CSV header
+    const headers = ['Event ID', 'Type', 'Timestamp', 'Duration (ms)', 'Cost ($)', 'Data'];
+    
+    // Create CSV rows
+    const rows = STATE.currentEvents.map(e => [
+        e.id || e.event_id || '',
+        e.event_type || '',
+        e.timestamp ? new Date(e.timestamp).toISOString() : '',
+        e.duration_ms || 0,
+        (e.cost || 0).toFixed(6),
+        JSON.stringify(e.data || e.event_data || {}).replace(/"/g, '""')
+    ]);
+    
+    // Combine into CSV string
+    const csv = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+    
+    // Download
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const sessionId = STATE.currentSession || 'session';
+    a.download = `ragdebug-events-${sessionId.slice(0, 8)}-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showToast('Success', 'Events exported as CSV', 'success');
+}
+
+function copyToClipboard() {
+    if (!STATE.currentEvents || STATE.currentEvents.length === 0) {
+        showToast('Error', 'No events to copy', 'error');
+        return;
+    }
+    
+    const text = JSON.stringify(STATE.currentEvents, null, 2);
+    
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Success', `Copied ${STATE.currentEvents.length} events to clipboard`, 'success');
+    }).catch(err => {
+        showToast('Error', 'Failed to copy to clipboard', 'error');
+        console.error('Clipboard error:', err);
+    });
 }
 
 /* ========================================
