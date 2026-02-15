@@ -209,6 +209,48 @@ async def log_event(session_id: str, event: StoredEvent):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/sessions/{session_id}/events", response_model=List[StoredEvent])
+async def get_session_events(session_id: str):
+    """
+    Get all events for a session.
+    
+    Args:
+        session_id: Session ID
+        
+    Returns:
+        List of events for the session
+    """
+    try:
+        db = get_db()
+        
+        # Verify session exists
+        session = db.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+        
+        # Get session detail which includes events
+        session_detail = db.get_session_detail(session_id)
+        if not session_detail:
+            return []
+        
+        events = []
+        # Collect all events from session detail
+        if session_detail.retrieval:
+            events.append(session_detail.retrieval)
+        if session_detail.prompt:
+            events.append(session_detail.prompt)
+        if session_detail.generation:
+            events.append(session_detail.generation)
+        
+        logger.info(f"Retrieved {len(events)} events for session {session_id}")
+        return events
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting events for session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Cost endpoints
 
 @router.get("/sessions/{session_id}/costs", response_model=CostBreakdown)
@@ -237,6 +279,20 @@ async def get_costs(session_id: str):
     except Exception as e:
         logger.error(f"Error getting costs for session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sessions/{session_id}/cost", response_model=CostBreakdown)
+async def get_session_cost(session_id: str):
+    """
+    Get cost breakdown for a session (singular endpoint alias).
+    
+    Args:
+        session_id: Session ID
+        
+    Returns:
+        Cost breakdown
+    """
+    return await get_costs(session_id)
 
 
 # Snapshot endpoints

@@ -3,8 +3,8 @@
    ======================================== */
 
 const CONFIG = {
-    apiBaseUrl: 'http://localhost:8000/api',  // Fixed: /api not /api/v1
-    wsUrl: 'ws://localhost:8000/ws',
+    apiBaseUrl: 'http://localhost:8765/api',  // Fixed: API runs on port 8765
+    wsUrl: 'ws://localhost:8765/ws',
     refreshInterval: 5000,
     toastDuration: 4000
 };
