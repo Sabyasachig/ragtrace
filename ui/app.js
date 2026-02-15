@@ -3,8 +3,8 @@
    ======================================== */
 
 const CONFIG = {
-    apiBaseUrl: 'http://localhost:8765/api',  // Fixed: API runs on port 8765
-    wsUrl: 'ws://localhost:8765/ws',
+    apiBaseUrl: 'http://localhost:8000/api',  // API server port
+    wsUrl: 'ws://localhost:8000/ws',
     refreshInterval: 5000,
     toastDuration: 4000
 };
@@ -201,7 +201,7 @@ function switchView(viewName) {
     loadViewData(viewName);
 }
 
-function loadViewData(viewName) {
+async function loadViewData(viewName) {
     switch (viewName) {
         case 'sessions':
             loadSessions();
@@ -209,6 +209,29 @@ function loadViewData(viewName) {
         case 'timeline':
             if (STATE.currentSession) {
                 loadTimeline(STATE.currentSession);
+            } else {
+                // Auto-select most recent session if none selected
+                if (STATE.sessions.length === 0) {
+                    await loadSessions();
+                }
+                if (STATE.sessions.length > 0) {
+                    const mostRecentSession = STATE.sessions[0];
+                    const sessionId = mostRecentSession.id || mostRecentSession.session_id;
+                    STATE.currentSession = sessionId;
+                    loadTimeline(sessionId);
+                } else {
+                    // Show empty state if no sessions
+                    const timelineEl = document.getElementById('timeline');
+                    if (timelineEl) {
+                        timelineEl.innerHTML = `
+                            <div class="empty-state">
+                                <span class="empty-icon">📊</span>
+                                <h3>No Sessions Available</h3>
+                                <p>Create a session first to view timeline data</p>
+                            </div>
+                        `;
+                    }
+                }
             }
             break;
         case 'regression':
@@ -454,19 +477,24 @@ function renderTimeline(events) {
     // Sort events by timestamp
     events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    timelineEl.innerHTML = events.map(event => `
-        <div class="timeline-event" data-event-id="${event.event_id}" onclick="showEventDetails('${event.event_id}')">
+    timelineEl.innerHTML = events.map(event => {
+        const eventId = event.id || event.event_id;
+        return `
+        <div class="timeline-event" data-event-id="${eventId}" onclick="showEventDetails('${eventId}')">
             <div class="timeline-event-time">${formatTime(event.timestamp)}</div>
             <div class="timeline-event-content">
                 <div class="timeline-event-type">${getEventIcon(event.event_type)} ${event.event_type}</div>
                 <div class="timeline-event-details">${getEventSummary(event)}</div>
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 function getEventIcon(eventType) {
     const icons = {
+        'retrieval': '🔍',
+        'prompt': '📝',
+        'generation': '🚀',
         'llm_start': '🚀',
         'llm_end': '✓',
         'llm_error': '⚠️',
@@ -483,8 +511,22 @@ function getEventIcon(eventType) {
 }
 
 function getEventSummary(event) {
-    const data = event.event_data || {};
+    const data = event.data || event.event_data || {};
     
+    // Handle new event types
+    if (event.event_type === 'retrieval') {
+        return `Retrieved ${data.chunks?.length || 0} chunks • ${data.duration_ms || 0}ms • $${(data.embedding_cost || 0).toFixed(6)}`;
+    }
+    
+    if (event.event_type === 'prompt') {
+        return `${data.token_count || 0} tokens • Template: ${data.template_name || 'default'}`;
+    }
+    
+    if (event.event_type === 'generation') {
+        return `${data.input_tokens || 0} → ${data.output_tokens || 0} tokens • ${data.duration_ms || 0}ms • $${(data.cost || 0).toFixed(6)}`;
+    }
+    
+    // Legacy event types
     if (event.event_type === 'llm_end') {
         return `Generated ${data.output_tokens || 0} tokens • $${(data.cost || 0).toFixed(6)}`;
     }
@@ -500,7 +542,7 @@ function getEventSummary(event) {
     return JSON.stringify(data).slice(0, 100);
 }
 
-async function showEventDetails(eventId) {
+function showEventDetails(eventId) {
     // Remove selection from all events
     document.querySelectorAll('.timeline-event').forEach(el => {
         el.classList.remove('selected');
@@ -511,21 +553,22 @@ async function showEventDetails(eventId) {
 
     const detailsEl = document.getElementById('event-details');
     
-    // Find event in current session
-    const eventsData = await api.getEvents(STATE.currentSession);
-    const event = eventsData.events.find(e => e.event_id === eventId);
+    // Find event in STATE.currentEvents
+    const event = STATE.currentEvents.find(e => (e.id || e.event_id) === eventId);
     
     if (!event) {
         detailsEl.innerHTML = '<h3>Event Details</h3><p class="text-danger">Event not found</p>';
         return;
     }
+    
+    const eventData = event.data || event.event_data || {};
 
     detailsEl.innerHTML = `
         <h3>Event Details</h3>
         <div class="event-details-content">
             <div class="detail-group">
                 <div class="detail-label">Event ID</div>
-                <div class="detail-value">${event.event_id}</div>
+                <div class="detail-value">${event.id || event.event_id}</div>
             </div>
             <div class="detail-group">
                 <div class="detail-label">Type</div>
@@ -537,17 +580,17 @@ async function showEventDetails(eventId) {
             </div>
             <div class="detail-group">
                 <div class="detail-label">Duration</div>
-                <div class="detail-value">${event.duration ? `${event.duration.toFixed(3)}s` : 'N/A'}</div>
+                <div class="detail-value">${eventData.duration_ms ? `${eventData.duration_ms}ms` : 'N/A'}</div>
             </div>
-            ${event.cost ? `
+            ${eventData.cost ? `
             <div class="detail-group">
                 <div class="detail-label">Cost</div>
-                <div class="detail-value cost">$${event.cost.toFixed(6)}</div>
+                <div class="detail-value cost">$${eventData.cost.toFixed(6)}</div>
             </div>
             ` : ''}
             <div class="detail-group">
                 <div class="detail-label">Event Data</div>
-                <div class="detail-value">${JSON.stringify(event.event_data, null, 2)}</div>
+                <div class="detail-value"><pre>${JSON.stringify(eventData, null, 2)}</pre></div>
             </div>
         </div>
     `;
@@ -584,7 +627,10 @@ function renderWaterfallChart(events) {
             labels: events.map((e, i) => `${i + 1}. ${e.event_type || 'Unknown'}`),
             datasets: [{
                 label: 'Duration (ms)',
-                data: events.map(e => e.duration_ms || 0),
+                data: events.map(e => {
+                    const data = e.data || {};
+                    return data.duration_ms || 0;
+                }),
                 backgroundColor: events.map(e => getEventColor(e.event_type)),
                 borderWidth: 1,
                 borderColor: 'rgba(0, 0, 0, 0.1)'
@@ -600,9 +646,10 @@ function renderWaterfallChart(events) {
                     callbacks: {
                         label: function(context) {
                             const event = events[context.dataIndex];
+                            const eventData = event.data || {};
                             return [
-                                `Duration: ${event.duration_ms || 0}ms`,
-                                `Cost: $${(event.cost || 0).toFixed(6)}`,
+                                `Duration: ${eventData.duration_ms || 0}ms`,
+                                `Cost: $${(eventData.cost || 0).toFixed(6)}`,
                                 `Type: ${event.event_type || 'Unknown'}`
                             ];
                         }
@@ -858,11 +905,17 @@ function filterEvents() {
     }
     
     if (minDuration > 0) {
-        filtered = filtered.filter(e => (e.duration_ms || 0) >= minDuration);
+        filtered = filtered.filter(e => {
+            const data = e.data || {};
+            return (data.duration_ms || 0) >= minDuration;
+        });
     }
     
     if (maxCost < Infinity) {
-        filtered = filtered.filter(e => (e.cost || 0) <= maxCost);
+        filtered = filtered.filter(e => {
+            const data = e.data || {};
+            return (data.cost || 0) <= maxCost;
+        });
     }
     
     renderTimeline(filtered);
@@ -930,14 +983,17 @@ function exportSessionCSV() {
     const headers = ['Event ID', 'Type', 'Timestamp', 'Duration (ms)', 'Cost ($)', 'Data'];
     
     // Create CSV rows
-    const rows = STATE.currentEvents.map(e => [
-        e.id || e.event_id || '',
-        e.event_type || '',
-        e.timestamp ? new Date(e.timestamp).toISOString() : '',
-        e.duration_ms || 0,
-        (e.cost || 0).toFixed(6),
-        JSON.stringify(e.data || e.event_data || {}).replace(/"/g, '""')
-    ]);
+    const rows = STATE.currentEvents.map(e => {
+        const eventData = e.data || e.event_data || {};
+        return [
+            e.id || e.event_id || '',
+            e.event_type || '',
+            e.timestamp ? new Date(e.timestamp).toISOString() : '',
+            eventData.duration_ms || 0,
+            (eventData.cost || 0).toFixed(6),
+            JSON.stringify(eventData).replace(/"/g, '""')
+        ];
+    });
     
     // Combine into CSV string
     const csv = [
@@ -1173,3 +1229,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     console.log('RAG Debugger UI initialized');
 });
+
+/* ========================================
+   Expose Functions to Global Scope
+   (Required for onclick handlers in module)
+   ======================================== */
+
+window.viewSession = viewSession;
+window.showEventDetails = showEventDetails;
+window.filterEvents = filterEvents;
+window.clearFilters = clearFilters;
+window.exportSessionJSON = exportSessionJSON;
+window.exportSessionCSV = exportSessionCSV;
+window.copyToClipboard = copyToClipboard;

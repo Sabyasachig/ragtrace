@@ -212,13 +212,13 @@ async def log_event(session_id: str, event: StoredEvent):
 @router.get("/sessions/{session_id}/events", response_model=List[StoredEvent])
 async def get_session_events(session_id: str):
     """
-    Get all events for a session.
+    Get all events for a session as StoredEvent objects.
     
     Args:
         session_id: Session ID
         
     Returns:
-        List of events for the session
+        List of StoredEvent objects for the session
     """
     try:
         db = get_db()
@@ -228,19 +228,26 @@ async def get_session_events(session_id: str):
         if not session:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
         
-        # Get session detail which includes events
-        session_detail = db.get_session_detail(session_id)
-        if not session_detail:
-            return []
+        # Query events directly from database
+        cursor = db.conn.cursor()
+        cursor.execute("""
+            SELECT id, session_id, event_type, timestamp, data
+            FROM events 
+            WHERE session_id = ? 
+            ORDER BY timestamp ASC
+        """, (session_id,))
         
         events = []
-        # Collect all events from session detail
-        if session_detail.retrieval:
-            events.append(session_detail.retrieval)
-        if session_detail.prompt:
-            events.append(session_detail.prompt)
-        if session_detail.generation:
-            events.append(session_detail.generation)
+        for row in cursor.fetchall():
+            import json
+            event = StoredEvent(
+                id=row["id"],
+                session_id=row["session_id"],
+                event_type=row["event_type"],
+                timestamp=row["timestamp"],
+                data=json.loads(row["data"])
+            )
+            events.append(event)
         
         logger.info(f"Retrieved {len(events)} events for session {session_id}")
         return events

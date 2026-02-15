@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Timeline Debug Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #f5f5f5; }
+        .test-result { margin: 10px 0; padding: 10px; background: white; border-left: 4px solid #4CAF50; }
+        .test-result.error { border-left-color: #f44336; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { background: #eee; padding: 10px; overflow: auto; max-height: 300px; }
+    </style>
+</head>
+<body>
+    <h1>RAG Debugger - Timeline API Test</h1>
+    
+    <div>
+        <button onclick="testSessions()">Test 1: Load Sessions</button>
+        <button onclick="testEvents()">Test 2: Load Events</button>
+        <button onclick="testCost()">Test 3: Load Cost</button>
+        <button onclick="clearResults()">Clear</button>
+    </div>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_URL = 'http://localhost:8000/api';
+        const results = document.getElementById('results');
+        let currentSessionId = null;
+
+        function clearResults() {
+            results.innerHTML = '';
+        }
+
+        function addResult(title, data, isError = false) {
+            const div = document.createElement('div');
+            div.className = 'test-result' + (isError ? ' error' : '');
+            div.innerHTML = `<h3>${isError ? '❌' : '✅'} ${title}</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+            results.appendChild(div);
+        }
+
+        async function testSessions() {
+            try {
+                addResult('Loading sessions...', { status: 'pending' });
+                const response = await fetch(`${API_URL}/sessions?limit=10`);
+                const data = await response.json();
+                
+                if (data && data.length > 0) {
+                    currentSessionId = data[0].id;
+                    addResult(`Sessions Loaded (${data.length} total)`, {
+                        count: data.length,
+                        first_session: {
+                            id: currentSessionId,
+                            query: data[0].query,
+                            cost: data[0].total_cost,
+                            model: data[0].model
+                        }
+                    });
+                } else {
+                    addResult('No Sessions Found', data, true);
+                }
+            } catch (error) {
+                addResult('Sessions API Error', { error: error.message }, true);
+            }
+        }
+
+        async function testEvents() {
+            if (!currentSessionId) {
+                addResult('No Session Selected', { message: 'Run Test 1 first' }, true);
+                return;
+            }
+            
+            try {
+                addResult(`Loading events for session ${currentSessionId.slice(0, 8)}...`, { status: 'pending' });
+                const response = await fetch(`${API_URL}/sessions/${currentSessionId}/events`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addResult(`Events Loaded (${data.length} events)`, {
+                        count: data.length,
+                        event_types: data.map(e => e.event_type),
+                        events: data.map(e => ({
+                            id: e.id.slice(0, 8) + '...',
+                            type: e.event_type,
+                            timestamp: e.timestamp,
+                            has_data: !!e.data
+                        }))
+                    });
+                } else {
+                    addResult('Events API Error', data, true);
+                }
+            } catch (error) {
+                addResult('Events Fetch Error', { error: error.message }, true);
+            }
+        }
+
+        async function testCost() {
+            if (!currentSessionId) {
+                addResult('No Session Selected', { message: 'Run Test 1 first' }, true);
+                return;
+            }
+            
+            try {
+                addResult(`Loading cost for session ${currentSessionId.slice(0, 8)}...`, { status: 'pending' });
+                const response = await fetch(`${API_URL}/sessions/${currentSessionId}/cost`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addResult('Cost Data Loaded', data);
+                } else {
+                    addResult('Cost API Error', data, true);
+                }
+            } catch (error) {
+                addResult('Cost Fetch Error', { error: error.message }, true);
+            }
+        }
+
+        // Auto-run on load
+        window.onload = () => {
+            console.log('Timeline debug test page loaded');
+            testSessions();
+        };
+    </script>
+</body>
+</html>

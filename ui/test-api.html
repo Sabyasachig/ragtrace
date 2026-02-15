@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Debug Test</title>
+</head>
+<body>
+    <h1>RAG Debugger API Test</h1>
+    
+    <div>
+        <h2>Test Results:</h2>
+        <div id="results" style="font-family: monospace; white-space: pre-wrap; background: #f0f0f0; padding: 10px; margin: 10px 0;"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000/api';
+        const results = document.getElementById('results');
+
+        async function testAPI() {
+            results.textContent = 'Testing API...\n\n';
+
+            // Test 1: Root endpoint
+            try {
+                results.textContent += '1. Testing root endpoint...\n';
+                const rootResp = await fetch('http://localhost:8000/');
+                const rootData = await rootResp.json();
+                results.textContent += `   ✓ Root: ${JSON.stringify(rootData)}\n\n`;
+            } catch (error) {
+                results.textContent += `   ✗ Root failed: ${error.message}\n\n`;
+            }
+
+            // Test 2: Sessions endpoint
+            try {
+                results.textContent += '2. Testing /api/sessions endpoint...\n';
+                const sessionsResp = await fetch(`${API_URL}/sessions`);
+                const sessionsData = await sessionsResp.json();
+                results.textContent += `   ✓ Sessions returned: ${sessionsData.length} items\n`;
+                
+                if (sessionsData.length > 0) {
+                    results.textContent += `   First session:\n`;
+                    results.textContent += `     ID: ${sessionsData[0].id}\n`;
+                    results.textContent += `     Query: ${sessionsData[0].query}\n`;
+                    results.textContent += `     Cost: $${sessionsData[0].total_cost}\n`;
+                    results.textContent += `     Model: ${sessionsData[0].model}\n`;
+                } else {
+                    results.textContent += `   ⚠ No sessions found in database!\n`;
+                }
+                results.textContent += '\n';
+            } catch (error) {
+                results.textContent += `   ✗ Sessions failed: ${error.message}\n\n`;
+            }
+
+            // Test 3: Check CORS headers
+            try {
+                results.textContent += '3. Checking CORS headers...\n';
+                const response = await fetch(`${API_URL}/sessions`, { method: 'OPTIONS' });
+                results.textContent += `   ✓ CORS check passed\n\n`;
+            } catch (error) {
+                results.textContent += `   ✗ CORS check failed: ${error.message}\n\n`;
+            }
+
+            results.textContent += '=== Test Complete ===';
+        }
+
+        // Run test on page load
+        testAPI();
+    </script>
+</body>
+</html>
