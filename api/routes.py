@@ -17,7 +17,11 @@ from core.models import (
     CostBreakdown,
     StoredEvent,
     Snapshot,
+    ComparisonResult,
+    PromptVersion,
+    PromptVersionDiff,
 )
+from core.regression import compare_snapshots, score_regression
 
 logger = logging.getLogger(__name__)
 
@@ -427,6 +431,66 @@ async def delete_snapshot(snapshot_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/snapshots/{snapshot1_id}/compare/{snapshot2_id}", response_model=ComparisonResult)
+async def compare_snapshots_endpoint(snapshot1_id: str, snapshot2_id: str):
+    """
+    Compare two snapshots for regression testing.
+
+    Args:
+        snapshot1_id: Baseline snapshot ID
+        snapshot2_id: Candidate snapshot ID
+
+    Returns:
+        Full ComparisonResult with retrieval, answer and cost diffs.
+    """
+    try:
+        db = get_db()
+
+        snap1 = db.get_snapshot(snapshot1_id)
+        if not snap1:
+            raise HTTPException(status_code=404, detail=f"Snapshot {snapshot1_id} not found")
+
+        snap2 = db.get_snapshot(snapshot2_id)
+        if not snap2:
+            raise HTTPException(status_code=404, detail=f"Snapshot {snapshot2_id} not found")
+
+        result = compare_snapshots(snap1, snap2)
+        logger.info(f"Compared snapshots {snapshot1_id} vs {snapshot2_id}")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error comparing snapshots: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/snapshots/{snapshot1_id}/score/{snapshot2_id}")
+async def score_snapshots_endpoint(snapshot1_id: str, snapshot2_id: str):
+    """
+    Get a regression score summary comparing two snapshots.
+
+    Returns a concise verdict (PASS / WARN / FAIL) with per-dimension scores.
+    """
+    try:
+        db = get_db()
+
+        snap1 = db.get_snapshot(snapshot1_id)
+        if not snap1:
+            raise HTTPException(status_code=404, detail=f"Snapshot {snapshot1_id} not found")
+
+        snap2 = db.get_snapshot(snapshot2_id)
+        if not snap2:
+            raise HTTPException(status_code=404, detail=f"Snapshot {snapshot2_id} not found")
+
+        score = score_regression(snap1, snap2)
+        return score
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error scoring snapshots: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/sessions/latest/id")
 async def get_latest_session_id():
     """
@@ -450,3 +514,167 @@ async def get_latest_session_id():
     except Exception as e:
         logger.error(f"Error getting latest session: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Prompt Versioning endpoints ───────────────────────────────────────────────
+
+@router.get("/prompts", response_model=List[str])
+async def list_prompt_names():
+    """Return all distinct prompt names in the registry."""
+    try:
+        db = get_db()
+        return db.list_prompt_names()
+    except Exception as e:
+        logger.error(f"Error listing prompt names: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/prompts", response_model=PromptVersion, status_code=201)
+async def create_prompt_version(
+    name: str = Body(...),
+    template: str = Body(...),
+    description: Optional[str] = Body(None),
+    tags: List[str] = Body(default_factory=list),
+):
+    """
+    Save a new version of a named prompt template.
+
+    If the name already exists a new version is created; otherwise the registry
+    entry is created at v1.
+
+    Args:
+        name: Logical prompt name (e.g. 'qa_template').
+        template: Full prompt template text.
+        description: Optional human-readable change description.
+        tags: Optional tags (e.g. ['production', 'v2']).
+
+    Returns:
+        The saved PromptVersion with its auto-assigned version number.
+    """
+    try:
+        db = get_db()
+        pv = PromptVersion(name=name, version=0, template=template,
+                           description=description, tags=tags)
+        saved = db.save_prompt_version(pv)
+        logger.info(f"Saved prompt '{name}' v{saved.version}")
+        return saved
+    except Exception as e:
+        logger.error(f"Error saving prompt version: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/prompts/{name}", response_model=List[PromptVersion])
+async def list_versions_for_prompt(name: str):
+    """List all versions of a named prompt, newest first."""
+    try:
+        db = get_db()
+        versions = db.list_prompt_versions(name)
+        if not versions:
+            raise HTTPException(status_code=404, detail=f"Prompt '{name}' not found")
+        return versions
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing versions for prompt '{name}': {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/prompts/{name}/active", response_model=PromptVersion)
+async def get_active_prompt_version(name: str):
+    """Return the currently active version of a named prompt."""
+    try:
+        db = get_db()
+        pv = db.get_prompt_version(name)
+        if not pv:
+            raise HTTPException(status_code=404, detail=f"Prompt '{name}' not found")
+        return pv
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting active prompt '{name}': {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/prompts/{name}/versions/{version}", response_model=PromptVersion)
+async def get_prompt_version(name: str, version: int):
+    """Return a specific version of a named prompt."""
+    try:
+        db = get_db()
+        pv = db.get_prompt_version(name, version)
+        if not pv:
+            raise HTTPException(
+                status_code=404, detail=f"Prompt '{name}' v{version} not found"
+            )
+        return pv
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting prompt '{name}' v{version}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/prompts/{name}/diff/{version_a}/{version_b}", response_model=PromptVersionDiff)
+async def diff_prompt_versions(name: str, version_a: int, version_b: int):
+    """
+    Return a unified diff between two versions of a prompt template.
+
+    Args:
+        name: Prompt name.
+        version_a: Baseline (older) version number.
+        version_b: Candidate (newer) version number.
+
+    Returns:
+        PromptVersionDiff with diff lines and similarity score.
+    """
+    try:
+        import difflib
+
+        db = get_db()
+        pv_a = db.get_prompt_version(name, version_a)
+        if not pv_a:
+            raise HTTPException(status_code=404, detail=f"Prompt '{name}' v{version_a} not found")
+
+        pv_b = db.get_prompt_version(name, version_b)
+        if not pv_b:
+            raise HTTPException(status_code=404, detail=f"Prompt '{name}' v{version_b} not found")
+
+        old_lines = pv_a.template.splitlines(keepends=True)
+        new_lines = pv_b.template.splitlines(keepends=True)
+        diff_lines = list(difflib.unified_diff(
+            old_lines, new_lines,
+            fromfile=f"v{version_a}", tofile=f"v{version_b}",
+            lineterm="",
+        ))
+        similarity = difflib.SequenceMatcher(None, pv_a.template, pv_b.template).ratio()
+
+        return PromptVersionDiff(
+            name=name,
+            version_old=version_a,
+            version_new=version_b,
+            diff_lines=diff_lines,
+            similarity_score=round(similarity, 4),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error diffing prompt '{name}': {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/prompts/{name}/versions/{version}", status_code=204)
+async def delete_prompt_version(name: str, version: int):
+    """Delete a specific version of a named prompt."""
+    try:
+        db = get_db()
+        deleted = db.delete_prompt_version(name, version)
+        if not deleted:
+            raise HTTPException(
+                status_code=404, detail=f"Prompt '{name}' v{version} not found"
+            )
+        return None
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting prompt '{name}' v{version}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

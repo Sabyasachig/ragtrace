@@ -14,31 +14,60 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-# Pricing per 1K tokens (as of 2024)
+# Pricing per 1K tokens (updated March 2026)
 # Source: https://openai.com/pricing
 PRICING: Dict[str, Dict[str, float]] = {
-    "gpt-4": {
-        "input": 0.03,  # $0.03 per 1K input tokens
-        "output": 0.06,  # $0.06 per 1K output tokens
+    # ── GPT-4o family ────────────────────────────────────────────────────────
+    "gpt-4o": {
+        "input": 0.0025,   # $2.50 / 1M input
+        "output": 0.01,    # $10.00 / 1M output
+    },
+    "gpt-4o-mini": {
+        "input": 0.00015,  # $0.15 / 1M input
+        "output": 0.0006,  # $0.60 / 1M output
+    },
+    # ── GPT-4 family ─────────────────────────────────────────────────────────
+    "gpt-4-turbo": {
+        "input": 0.01,
+        "output": 0.03,
     },
     "gpt-4-turbo-preview": {
         "input": 0.01,
         "output": 0.03,
     },
+    "gpt-4": {
+        "input": 0.03,
+        "output": 0.06,
+    },
     "gpt-4-32k": {
         "input": 0.06,
         "output": 0.12,
     },
+    # ── GPT-3.5 family ────────────────────────────────────────────────────────
     "gpt-3.5-turbo": {
-        "input": 0.0015,  # $0.0015 per 1K input tokens
-        "output": 0.002,  # $0.002 per 1K output tokens
+        "input": 0.0005,   # $0.50 / 1M input (updated pricing)
+        "output": 0.0015,  # $1.50 / 1M output
     },
     "gpt-3.5-turbo-16k": {
         "input": 0.003,
         "output": 0.004,
     },
+    # ── o1 / o3 reasoning models ──────────────────────────────────────────────
+    "o1": {
+        "input": 0.015,    # $15.00 / 1M input
+        "output": 0.06,    # $60.00 / 1M output
+    },
+    "o1-mini": {
+        "input": 0.001,
+        "output": 0.004,
+    },
+    "o3-mini": {
+        "input": 0.0011,
+        "output": 0.0044,
+    },
+    # ── Embedding models ──────────────────────────────────────────────────────
     "text-embedding-ada-002": {
-        "input": 0.0001,  # $0.0001 per 1K tokens
+        "input": 0.0001,
     },
     "text-embedding-3-small": {
         "input": 0.00002,
@@ -48,10 +77,10 @@ PRICING: Dict[str, Dict[str, float]] = {
     },
 }
 
-# Default pricing for unknown models (use GPT-3.5 as baseline)
+# Default pricing for unknown models (use gpt-4o-mini as baseline)
 DEFAULT_PRICING = {
-    "input": 0.0015,
-    "output": 0.002,
+    "input": 0.00015,
+    "output": 0.0006,
 }
 
 

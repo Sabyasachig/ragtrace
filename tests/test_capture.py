@@ -8,7 +8,7 @@ import pytest
 from datetime import datetime
 from unittest.mock import MagicMock
 
-from core.capture import CaptureSession, extract_chunks_text, detect_unused_chunks
+from core.capture import CaptureSession, extract_chunks_text, find_unused_chunks as detect_unused_chunks
 from core.models import RetrievedChunk, ChunkMetadata
 
 

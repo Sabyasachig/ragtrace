@@ -93,6 +93,56 @@ class APIClient {
         const params = sessionId ? `?session_id=${sessionId}` : '';
         return this.request(`/cost/breakdown${params}`);
     }
+
+    // Snapshot endpoints
+    async getSnapshots(limit = 20) {
+        return this.request(`/snapshots?limit=${limit}`);
+    }
+
+    async getSnapshot(snapshotId) {
+        return this.request(`/snapshots/${snapshotId}`);
+    }
+
+    async createSnapshot(payload) {
+        return this.request('/snapshots', { method: 'POST', body: JSON.stringify(payload) });
+    }
+
+    async deleteSnapshot(snapshotId) {
+        return this.request(`/snapshots/${snapshotId}`, { method: 'DELETE' });
+    }
+
+    async compareSnapshots(id1, id2) {
+        return this.request(`/snapshots/${id1}/compare/${id2}`);
+    }
+
+    async scoreSnapshots(id1, id2) {
+        return this.request(`/snapshots/${id1}/score/${id2}`);
+    }
+
+    // Prompt versioning endpoints
+    async getPromptNames() {
+        return this.request('/prompts');
+    }
+
+    async getPromptVersions(name) {
+        return this.request(`/prompts/${encodeURIComponent(name)}`);
+    }
+
+    async getActivePrompt(name) {
+        return this.request(`/prompts/${encodeURIComponent(name)}/active`);
+    }
+
+    async savePromptVersion(payload) {
+        return this.request('/prompts', { method: 'POST', body: JSON.stringify(payload) });
+    }
+
+    async diffPrompts(name, va, vb) {
+        return this.request(`/prompts/${encodeURIComponent(name)}/diff/${va}/${vb}`);
+    }
+
+    async deletePromptVersion(name, version) {
+        return this.request(`/prompts/${encodeURIComponent(name)}/versions/${version}`, { method: 'DELETE' });
+    }
 }
 
 const api = new APIClient(CONFIG.apiBaseUrl);
@@ -775,18 +825,139 @@ function getEventColor(eventType) {
 
 async function loadSnapshots() {
     const container = document.getElementById('snapshots-list');
-    
-    // TODO: Implement snapshot loading when backend is ready
-    container.innerHTML = `
-        <div class="empty-state">
-            <span class="empty-icon">📸</span>
-            <h3>No Snapshots Yet</h3>
-            <p>Create snapshots to track changes over time</p>
-            <button class="btn-primary" style="margin-top: 1rem;" onclick="createSnapshot()">
-                + Create First Snapshot
-            </button>
-        </div>
-    `;
+    container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading snapshots...</p></div>';
+
+    try {
+        const snapshots = await api.getSnapshots(50);
+
+        if (!snapshots || snapshots.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <span class="empty-icon">📸</span>
+                    <h3>No Snapshots Yet</h3>
+                    <p>Create snapshots to track changes over time</p>
+                    <button class="btn-primary" style="margin-top: 1rem;" onclick="createSnapshot()">
+                        + Create First Snapshot
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 style="margin: 0;">${snapshots.length} snapshot${snapshots.length !== 1 ? 's' : ''}</h3>
+                <button class="btn-primary" onclick="createSnapshot()">+ New Snapshot</button>
+            </div>
+            <div class="snapshots-grid">
+                ${snapshots.map(snap => `
+                    <div class="snapshot-card" id="snap-${snap.id}">
+                        <div class="snapshot-card-header">
+                            <strong>${snap.name || snap.id.slice(0, 8)}</strong>
+                            <span class="snapshot-date">${formatDate(snap.created_at)}</span>
+                        </div>
+                        ${snap.description ? `<p class="snapshot-desc">${snap.description}</p>` : ''}
+                        <div class="snapshot-meta">
+                            <span>ID: <code>${snap.id.slice(0, 10)}…</code></span>
+                        </div>
+                        <div class="snapshot-actions">
+                            <button class="btn-secondary btn-sm" onclick="selectForCompare('${snap.id}')">Compare</button>
+                            <button class="btn-danger btn-sm" onclick="deleteSnapshot('${snap.id}')">Delete</button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            <div id="compare-panel" style="display:none; margin-top: 1.5rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: 0.5rem;">
+                <h4 style="margin: 0 0 0.75rem 0;">Regression Comparison</h4>
+                <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                    <div>
+                        <label style="font-size: 0.85rem; font-weight: 600;">Baseline</label>
+                        <select id="compare-base" style="margin-left: 0.5rem; padding: 0.35rem 0.5rem; border: 1px solid var(--border-color); border-radius: 0.4rem;">
+                            ${snapshots.map(s => `<option value="${s.id}">${s.name || s.id.slice(0,8)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.85rem; font-weight: 600;">Candidate</label>
+                        <select id="compare-candidate" style="margin-left: 0.5rem; padding: 0.35rem 0.5rem; border: 1px solid var(--border-color); border-radius: 0.4rem;">
+                            ${snapshots.map((s, i) => `<option value="${s.id}" ${i === 1 ? 'selected' : ''}>${s.name || s.id.slice(0,8)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <button class="btn-primary" onclick="runRegression()">Run Regression</button>
+                </div>
+                <div id="regression-result" style="margin-top: 1rem;"></div>
+            </div>
+        `;
+
+        // Show compare panel automatically if we have >= 2 snapshots
+        if (snapshots.length >= 2) {
+            document.getElementById('compare-panel').style.display = 'block';
+        }
+    } catch (error) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <span class="empty-icon">⚠️</span>
+                <h3>Failed to Load Snapshots</h3>
+                <p>${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+function selectForCompare(snapshotId) {
+    const panel = document.getElementById('compare-panel');
+    if (panel) panel.style.display = 'block';
+    const candidateSelect = document.getElementById('compare-candidate');
+    if (candidateSelect) candidateSelect.value = snapshotId;
+}
+
+async function runRegression() {
+    const baseId = document.getElementById('compare-base')?.value;
+    const candidateId = document.getElementById('compare-candidate')?.value;
+    const resultEl = document.getElementById('regression-result');
+
+    if (!baseId || !candidateId) return;
+    if (baseId === candidateId) {
+        showToast('Error', 'Please select two different snapshots', 'error');
+        return;
+    }
+
+    resultEl.innerHTML = '<div class="loading"><div class="spinner"></div><p>Running comparison…</p></div>';
+
+    try {
+        const [scoreData, comparison] = await Promise.all([
+            api.scoreSnapshots(baseId, candidateId),
+            api.compareSnapshots(baseId, candidateId)
+        ]);
+
+        const verdictClass = {PASS: 'text-success', WARN: 'text-warning', FAIL: 'text-danger'}[scoreData.verdict] || '';
+        resultEl.innerHTML = `
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-start;">
+                <div style="flex: 0 0 auto; text-align: center; padding: 1rem; background: var(--card-bg); border-radius: 0.5rem; min-width: 140px;">
+                    <div style="font-size: 2rem; font-weight: 700;" class="${verdictClass}">${scoreData.verdict}</div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted);">Score: ${(scoreData.score * 100).toFixed(1)}%</div>
+                </div>
+                <div style="flex: 1; min-width: 260px;">
+                    <table style="width:100%; font-size: 0.875rem; border-collapse: collapse;">
+                        <tr><td style="padding: 0.3rem 0.6rem; color: var(--text-muted);">Retrieval similarity</td>
+                            <td style="padding: 0.3rem 0.6rem; font-weight: 600;">${((comparison.retrieval_diff?.similarity ?? 0) * 100).toFixed(1)}%</td></tr>
+                        <tr><td style="padding: 0.3rem 0.6rem; color: var(--text-muted);">Answer similarity</td>
+                            <td style="padding: 0.3rem 0.6rem; font-weight: 600;">${((comparison.answer_diff?.similarity ?? 0) * 100).toFixed(1)}%</td></tr>
+                        <tr><td style="padding: 0.3rem 0.6rem; color: var(--text-muted);">Cost delta</td>
+                            <td style="padding: 0.3rem 0.6rem; font-weight: 600;">$${(comparison.cost_diff?.absolute_delta ?? 0).toFixed(6)}</td></tr>
+                    </table>
+                    ${comparison.answer_diff?.diff_lines?.length
+                        ? `<details style="margin-top:0.5rem;"><summary style="cursor:pointer;font-size:0.8rem;">Show answer diff</summary>
+                            <pre style="font-size:0.75rem;overflow:auto;max-height:200px;background:var(--code-bg,#f5f5f5);padding:0.5rem;border-radius:0.4rem;">${comparison.answer_diff.diff_lines.map(l => escapeHtml(l)).join('\n')}</pre></details>`
+                        : ''}
+                </div>
+            </div>`;
+    } catch (error) {
+        resultEl.innerHTML = `<p class="text-danger">Comparison failed: ${error.message}</p>`;
+    }
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function createSnapshot() {
@@ -802,6 +973,11 @@ function createSnapshot() {
                 <textarea id="snapshot-desc" placeholder="Optional description" rows="3"
                     style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0.5rem;"></textarea>
             </div>
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Session ID (to snapshot)</label>
+                <input type="text" id="snapshot-session-id" placeholder="e.g., abc-123…" 
+                    style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0.5rem;">
+            </div>
             <button class="btn-primary" onclick="saveSnapshot()" style="align-self: flex-end;">
                 Create Snapshot
             </button>
@@ -809,19 +985,35 @@ function createSnapshot() {
     `);
 }
 
-function saveSnapshot() {
-    const name = document.getElementById('snapshot-name').value;
-    const description = document.getElementById('snapshot-desc').value;
-    
+async function saveSnapshot() {
+    const name = document.getElementById('snapshot-name').value.trim();
+    const description = document.getElementById('snapshot-desc').value.trim();
+    const sessionId = document.getElementById('snapshot-session-id').value.trim();
+
     if (!name) {
         showToast('Error', 'Please enter a snapshot name', 'error');
         return;
     }
-    
-    // TODO: Implement snapshot creation
-    showToast('Success', 'Snapshot created successfully', 'success');
-    closeModal();
-    loadSnapshots();
+
+    try {
+        await api.createSnapshot({ name, description, session_id: sessionId || undefined });
+        showToast('Success', 'Snapshot created successfully', 'success');
+        closeModal();
+        loadSnapshots();
+    } catch (error) {
+        showToast('Error', `Failed to create snapshot: ${error.message}`, 'error');
+    }
+}
+
+async function deleteSnapshot(snapshotId) {
+    if (!confirm('Delete this snapshot? This action cannot be undone.')) return;
+    try {
+        await api.deleteSnapshot(snapshotId);
+        showToast('Success', 'Snapshot deleted', 'success');
+        loadSnapshots();
+    } catch (error) {
+        showToast('Error', `Failed to delete snapshot: ${error.message}`, 'error');
+    }
 }
 
 /* ========================================
@@ -830,59 +1022,149 @@ function saveSnapshot() {
 
 async function loadPrompts() {
     const container = document.getElementById('prompts-list');
-    
-    // TODO: Implement prompt loading when backend is ready
-    container.innerHTML = `
-        <div class="empty-state">
-            <span class="empty-icon">📝</span>
-            <h3>No Prompts Registered</h3>
-            <p>Register prompt templates to track versions</p>
-            <button class="btn-primary" style="margin-top: 1rem;" onclick="registerPrompt()">
-                + Register First Prompt
-            </button>
-        </div>
-    `;
+    container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading prompts…</p></div>';
+
+    try {
+        const names = await api.getPromptNames();
+
+        if (!names || names.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <span class="empty-icon">📝</span>
+                    <h3>No Prompts Registered</h3>
+                    <p>Register prompt templates to track versions</p>
+                    <button class="btn-primary" style="margin-top: 1rem;" onclick="registerPrompt()">
+                        + Register First Prompt
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        // Fetch all versions in parallel
+        const versionsPerName = await Promise.all(names.map(n => api.getPromptVersions(n)));
+
+        container.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 style="margin: 0;">${names.length} prompt${names.length !== 1 ? 's' : ''}</h3>
+                <button class="btn-primary" onclick="registerPrompt()">+ New Prompt</button>
+            </div>
+            ${names.map((name, i) => {
+                const versions = versionsPerName[i] || [];
+                const active = versions.find(v => v.is_active) || versions[0];
+                return `
+                <div class="prompt-card" style="border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem; margin-bottom: 0.75rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <strong style="font-size: 1rem;">${escapeHtml(name)}</strong>
+                        <span style="font-size: 0.8rem; color: var(--text-muted);">${versions.length} version${versions.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    ${active ? `
+                    <div style="margin-bottom: 0.75rem;">
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">Active template (v${active.version})</div>
+                        <pre style="margin: 0; font-size: 0.8rem; background: var(--code-bg, #f5f5f5); padding: 0.5rem; border-radius: 0.4rem; overflow: auto; max-height: 120px;">${escapeHtml(active.template)}</pre>
+                    </div>` : ''}
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+                        ${versions.length >= 2 ? `
+                        <select id="diff-va-${i}" style="padding: 0.3rem 0.5rem; border: 1px solid var(--border-color); border-radius: 0.4rem; font-size: 0.8rem;">
+                            ${versions.map(v => `<option value="${v.version}">v${v.version}</option>`).join('')}
+                        </select>
+                        <span style="font-size: 0.8rem; color: var(--text-muted);">vs</span>
+                        <select id="diff-vb-${i}" style="padding: 0.3rem 0.5rem; border: 1px solid var(--border-color); border-radius: 0.4rem; font-size: 0.8rem;">
+                            ${versions.map((v, vi) => `<option value="${v.version}" ${vi === 1 ? 'selected' : ''}>${'v' + v.version}</option>`).join('')}
+                        </select>
+                        <button class="btn-secondary btn-sm" onclick="showPromptDiff('${escapeHtml(name)}', ${i})">Show Diff</button>
+                        ` : ''}
+                        <button class="btn-primary btn-sm" onclick="registerPrompt('${escapeHtml(name)}')">+ New Version</button>
+                    </div>
+                    <div id="prompt-diff-${i}" style="margin-top: 0.5rem;"></div>
+                </div>`;
+            }).join('')}
+        `;
+    } catch (error) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <span class="empty-icon">⚠️</span>
+                <h3>Failed to Load Prompts</h3>
+                <p>${error.message}</p>
+            </div>
+        `;
+    }
 }
 
-function registerPrompt() {
+async function showPromptDiff(name, idx) {
+    const va = parseInt(document.getElementById(`diff-va-${idx}`)?.value);
+    const vb = parseInt(document.getElementById(`diff-vb-${idx}`)?.value);
+    const resultEl = document.getElementById(`prompt-diff-${idx}`);
+
+    if (va === vb) {
+        showToast('Error', 'Please select two different versions', 'error');
+        return;
+    }
+
+    resultEl.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+    try {
+        const diff = await api.diffPrompts(name, va, vb);
+        const lines = diff.diff_lines || [];
+        resultEl.innerHTML = `
+            <details open>
+                <summary style="cursor:pointer; font-size:0.8rem; margin-bottom:0.4rem;">
+                    Diff v${va} → v${vb} &nbsp; <span style="color:var(--text-muted);">similarity ${(diff.similarity_score * 100).toFixed(1)}%</span>
+                </summary>
+                <pre style="font-size:0.75rem;overflow:auto;max-height:200px;background:var(--code-bg,#f5f5f5);padding:0.5rem;border-radius:0.4rem;">${lines.map(l => {
+                    const cls = l.startsWith('+') ? 'color:green' : l.startsWith('-') ? 'color:red' : 'color:var(--text-muted)';
+                    return `<span style="${cls}">${escapeHtml(l)}</span>`;
+                }).join('\n')}</pre>
+            </details>`;
+    } catch (error) {
+        resultEl.innerHTML = `<p class="text-danger" style="font-size:0.8rem;">Diff failed: ${error.message}</p>`;
+    }
+}
+
+function registerPrompt(existingName = '') {
     showModal('Register Prompt', `
         <div style="display: flex; flex-direction: column; gap: 1rem;">
             <div>
                 <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Prompt Name</label>
-                <input type="text" id="prompt-name" placeholder="e.g., qa_prompt" 
-                    style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0.5rem;">
+                <input type="text" id="prompt-name" placeholder="e.g., qa_prompt" value="${escapeHtml(existingName)}"
+                    style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0.5rem;"
+                    ${existingName ? 'readonly' : ''}>
             </div>
             <div>
                 <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Template</label>
-                <textarea id="prompt-template" placeholder="Enter your prompt template..." rows="6"
+                <textarea id="prompt-template" placeholder="Enter your prompt template…" rows="6"
                     style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0.5rem; font-family: monospace;"></textarea>
             </div>
             <div>
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Version</label>
-                <input type="text" id="prompt-version" placeholder="e.g., 1.0.0" value="1.0.0"
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Description (optional)</label>
+                <input type="text" id="prompt-description" placeholder="What changed in this version?"
                     style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0.5rem;">
             </div>
             <button class="btn-primary" onclick="savePrompt()" style="align-self: flex-end;">
-                Register Prompt
+                Save Prompt
             </button>
         </div>
     `);
 }
 
-function savePrompt() {
-    const name = document.getElementById('prompt-name').value;
+async function savePrompt() {
+    const name = document.getElementById('prompt-name').value.trim();
     const template = document.getElementById('prompt-template').value;
-    const version = document.getElementById('prompt-version').value;
-    
+    const description = document.getElementById('prompt-description').value.trim();
+
     if (!name || !template) {
-        showToast('Error', 'Please fill in all required fields', 'error');
+        showToast('Error', 'Please fill in name and template', 'error');
         return;
     }
-    
-    // TODO: Implement prompt registration
-    showToast('Success', 'Prompt registered successfully', 'success');
-    closeModal();
-    loadPrompts();
+
+    try {
+        await api.savePromptVersion({ name, template, description: description || undefined });
+        showToast('Success', 'Prompt version saved', 'success');
+        closeModal();
+        loadPrompts();
+    } catch (error) {
+        showToast('Error', `Failed to save prompt: ${error.message}`, 'error');
+    }
 }
 
 /* ========================================

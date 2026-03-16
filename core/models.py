@@ -310,3 +310,49 @@ class StoredEvent(BaseModel):
     event_type: EventType
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     data: Dict[str, Any] = Field(..., description="Event-specific data as JSON")
+
+
+# ── Prompt Versioning ─────────────────────────────────────────────────────────
+
+class PromptVersion(BaseModel):
+    """
+    A versioned prompt template in the registry.
+
+    Each PromptVersion belongs to a named prompt (identified by ``name``).
+    The version counter is auto-incremented by the storage layer when a new
+    version is saved for the same name.
+    """
+
+    id: str = Field(default_factory=generate_id)
+    name: str = Field(..., description="Logical prompt name, e.g. 'qa_template'")
+    version: int = Field(..., description="Auto-incremented version number (1-based)")
+    template: str = Field(..., description="The prompt template text")
+    description: Optional[str] = Field(None, description="Optional change description")
+    tags: List[str] = Field(default_factory=list, description="User-defined tags")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    is_active: bool = Field(True, description="Whether this is the active version")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "pv_abc123",
+                "name": "qa_template",
+                "version": 2,
+                "template": "Context: {context}\n\nQuestion: {question}\n\nAnswer:",
+                "description": "More concise context instructions",
+                "tags": ["production"],
+                "created_at": "2024-01-15T10:00:00Z",
+                "is_active": True,
+            }
+        }
+
+
+class PromptVersionDiff(BaseModel):
+    """Diff between two PromptVersion templates."""
+
+    name: str
+    version_old: int
+    version_new: int
+    diff_lines: List[str]
+    similarity_score: float
+

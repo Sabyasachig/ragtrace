@@ -188,7 +188,7 @@ def list(limit: int):
         
         console.print("\n")
         console.print(table)
-console.print(f"\n[dim]Use 'ragtrace show <session_id>' to view details[/dim]")
+        console.print(f"\n[dim]Use 'ragtrace show <session_id>' to view details[/dim]")
         
     except Exception as e:
         console.print(f"[bold red]❌ Error:[/bold red] {e}")
@@ -363,6 +363,269 @@ def snapshot_list(limit: int):
         console.print("\n")
         console.print(table)
         
+    except Exception as e:
+        console.print(f"[bold red]❌ Error:[/bold red] {e}")
+        sys.exit(1)
+    finally:
+        close_db()
+
+
+@snapshot.command('compare')
+@click.argument('snapshot1_id')
+@click.argument('snapshot2_id')
+@click.option('--json', 'json_output', is_flag=True, help='Output full diff as JSON')
+def snapshot_compare(snapshot1_id: str, snapshot2_id: str, json_output: bool):
+    """
+    Compare two snapshots and show a regression report.
+
+    SNAPSHOT1_ID is treated as the baseline; SNAPSHOT2_ID is the new candidate.
+    """
+    try:
+        from core.regression import compare_snapshots, score_regression
+
+        db = get_db()
+
+        snap1 = db.get_snapshot(snapshot1_id)
+        if not snap1:
+            console.print(f"[red]Snapshot {snapshot1_id} not found.[/red]")
+            sys.exit(1)
+
+        snap2 = db.get_snapshot(snapshot2_id)
+        if not snap2:
+            console.print(f"[red]Snapshot {snapshot2_id} not found.[/red]")
+            sys.exit(1)
+
+        result = compare_snapshots(snap1, snap2)
+        score = score_regression(snap1, snap2)
+
+        if json_output:
+            print(json.dumps({
+                "score": score,
+                "comparison": result.model_dump(mode="json"),
+            }, indent=2, default=str))
+            return
+
+        # ── Pretty output ────────────────────────────────────────────────────
+        verdict_color = {"PASS": "green", "WARN": "yellow", "FAIL": "red"}.get(
+            score["verdict"], "white"
+        )
+
+        console.print()
+        console.print(Panel(
+            f"[bold {verdict_color}]{score['verdict']}[/bold {verdict_color}]  "
+            f"composite score: [cyan]{score['composite_score']:.2%}[/cyan]",
+            title="[bold]Regression Report[/bold]",
+            border_style=verdict_color,
+        ))
+
+        # Scores table
+        score_table = Table(show_header=True, box=box.SIMPLE, padding=(0, 2))
+        score_table.add_column("Dimension", style="dim")
+        score_table.add_column("Score / Value", style="cyan", justify="right")
+
+        score_table.add_row("Retrieval similarity", f"{score['retrieval_score']:.2%}")
+        score_table.add_row("Answer similarity", f"{score['answer_score']:.2%}")
+        score_table.add_row("Cost change", f"{score['cost_change_pct']:+.1f}%")
+        score_table.add_row("Chunks added", str(score['chunks_added']))
+        score_table.add_row("Chunks removed", str(score['chunks_removed']))
+        score_table.add_row("Same query", "✓" if score['query_same'] else "✗")
+        console.print(score_table)
+
+        # Answer diff (truncated)
+        if result.answer_diff.diff_lines:
+            console.print("\n[bold yellow]📝 Answer Diff (first 30 lines)[/bold yellow]")
+            diff_preview = result.answer_diff.diff_lines[:30]
+            for line in diff_preview:
+                if line.startswith("+"):
+                    console.print(f"[green]{line}[/green]")
+                elif line.startswith("-"):
+                    console.print(f"[red]{line}[/red]")
+                else:
+                    console.print(f"[dim]{line}[/dim]")
+
+        # Retrieval changes
+        if result.retrieval_diff.added:
+            console.print(f"\n[green]+ {len(result.retrieval_diff.added)} chunk(s) added[/green]")
+        if result.retrieval_diff.removed:
+            console.print(f"[red]- {len(result.retrieval_diff.removed)} chunk(s) removed[/red]")
+
+        console.print()
+
+    except Exception as e:
+        console.print(f"[bold red]❌ Error:[/bold red] {e}")
+        sys.exit(1)
+    finally:
+        close_db()
+
+
+# ── Prompt versioning commands ────────────────────────────────────────────────
+
+@cli.group()
+def prompt():
+    """Manage versioned prompt templates."""
+    pass
+
+
+@prompt.command("save")
+@click.argument("name")
+@click.argument("template_file", type=click.Path(exists=True))
+@click.option("--description", "-d", default=None, help="Change description")
+@click.option("--tag", "-t", multiple=True, help="Tags for this version")
+def prompt_save(name: str, template_file: str, description: Optional[str], tag: tuple):
+    """
+    Save a new version of a named prompt template.
+
+    NAME is the logical prompt name (e.g. 'qa_template').
+    TEMPLATE_FILE is a text file containing the prompt template.
+    """
+    try:
+        from core.models import PromptVersion
+
+        with open(template_file, "r") as fh:
+            template = fh.read()
+
+        db = get_db()
+        pv = PromptVersion(
+            name=name,
+            version=0,
+            template=template,
+            description=description,
+            tags=list(tag),
+        )
+        saved = db.save_prompt_version(pv)
+
+        console.print(f"\n[green]✓[/green] Saved [cyan]{name}[/cyan] as version [bold]{saved.version}[/bold]")
+        if description:
+            console.print(f"   [dim]{description}[/dim]")
+        if tag:
+            console.print(f"   Tags: [yellow]{', '.join(tag)}[/yellow]")
+
+    except Exception as e:
+        console.print(f"[bold red]❌ Error:[/bold red] {e}")
+        sys.exit(1)
+    finally:
+        close_db()
+
+
+@prompt.command("list")
+@click.argument("name", required=False)
+def prompt_list(name: Optional[str]):
+    """
+    List all prompt names or all versions of a specific prompt.
+
+    Without NAME, lists all distinct prompt names.
+    With NAME, lists all versions of that prompt.
+    """
+    try:
+        db = get_db()
+
+        if name is None:
+            names = db.list_prompt_names()
+            if not names:
+                console.print("[yellow]No prompts saved yet.[/yellow]")
+                return
+            console.print("\n[bold]Prompt Registry[/bold]\n")
+            for n in names:
+                active = db.get_prompt_version(n)
+                ver_str = f"v{active.version}" if active else "?"
+                console.print(f"  [cyan]{n}[/cyan]  [dim]({ver_str} active)[/dim]")
+        else:
+            versions = db.list_prompt_versions(name)
+            if not versions:
+                console.print(f"[yellow]Prompt '{name}' not found.[/yellow]")
+                return
+
+            table = Table(title=f"Versions: {name}", box=box.ROUNDED)
+            table.add_column("Ver", style="cyan", justify="right")
+            table.add_column("Active", justify="center")
+            table.add_column("Description", style="white")
+            table.add_column("Tags", style="yellow")
+            table.add_column("Created", style="dim")
+
+            for pv in versions:
+                active_mark = "[green]✓[/green]" if pv.is_active else ""
+                tags_str = ", ".join(pv.tags) if pv.tags else "-"
+                table.add_row(
+                    str(pv.version),
+                    active_mark,
+                    pv.description or "-",
+                    tags_str,
+                    pv.created_at.strftime("%Y-%m-%d %H:%M"),
+                )
+            console.print("\n")
+            console.print(table)
+
+    except Exception as e:
+        console.print(f"[bold red]❌ Error:[/bold red] {e}")
+        sys.exit(1)
+    finally:
+        close_db()
+
+
+@prompt.command("show")
+@click.argument("name")
+@click.option("--version", "-v", default=None, type=int, help="Specific version (default: active)")
+def prompt_show(name: str, version: Optional[int]):
+    """Print the template text for a prompt version."""
+    try:
+        db = get_db()
+        pv = db.get_prompt_version(name, version)
+        if not pv:
+            v_str = f" v{version}" if version else ""
+            console.print(f"[red]Prompt '{name}'{v_str} not found.[/red]")
+            return
+
+        label = f"{name} — v{pv.version}{' (active)' if pv.is_active else ''}"
+        console.print()
+        console.print(Panel(pv.template, title=f"[cyan]{label}[/cyan]", border_style="cyan"))
+
+    except Exception as e:
+        console.print(f"[bold red]❌ Error:[/bold red] {e}")
+        sys.exit(1)
+    finally:
+        close_db()
+
+
+@prompt.command("diff")
+@click.argument("name")
+@click.argument("version_a", type=int)
+@click.argument("version_b", type=int)
+def prompt_diff(name: str, version_a: int, version_b: int):
+    """Show the diff between two versions of a prompt template."""
+    try:
+        import difflib
+        db = get_db()
+
+        pv_a = db.get_prompt_version(name, version_a)
+        pv_b = db.get_prompt_version(name, version_b)
+
+        if not pv_a:
+            console.print(f"[red]Version {version_a} of '{name}' not found.[/red]")
+            return
+        if not pv_b:
+            console.print(f"[red]Version {version_b} of '{name}' not found.[/red]")
+            return
+
+        old_lines = pv_a.template.splitlines(keepends=True)
+        new_lines = pv_b.template.splitlines(keepends=True)
+        diff = list(difflib.unified_diff(
+            old_lines, new_lines,
+            fromfile=f"v{version_a}", tofile=f"v{version_b}", lineterm="",
+        ))
+
+        if not diff:
+            console.print("[green]Templates are identical.[/green]")
+            return
+
+        console.print(f"\n[bold]Diff: [cyan]{name}[/cyan] v{version_a} → v{version_b}[/bold]\n")
+        for line in diff:
+            if line.startswith("+") and not line.startswith("+++"):
+                console.print(f"[green]{line}[/green]")
+            elif line.startswith("-") and not line.startswith("---"):
+                console.print(f"[red]{line}[/red]")
+            else:
+                console.print(f"[dim]{line}[/dim]")
+
     except Exception as e:
         console.print(f"[bold red]❌ Error:[/bold red] {e}")
         sys.exit(1)
