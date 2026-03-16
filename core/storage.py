@@ -26,6 +26,8 @@ from .models import (
     SessionDetail,
     CostBreakdown,
     StoredEvent,
+    PromptVersion,
+    PromptVersionDiff,
 )
 
 logger = logging.getLogger(__name__)
@@ -114,7 +116,25 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_snapshots_tags 
             ON snapshots(tags)
         """)
-        
+
+        # Prompt versions table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS prompt_versions (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                template TEXT NOT NULL,
+                description TEXT,
+                tags TEXT,
+                created_at DATETIME NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_prompt_versions_name
+            ON prompt_versions(name, version DESC)
+        """)
+
         self.conn.commit()
         logger.info(f"Database initialized at {self.db_path}")
     
@@ -512,6 +532,142 @@ class Database:
         """
         sessions = self.list_sessions(limit=1)
         return sessions[0] if sessions else None
+
+    # ── Prompt Version CRUD ───────────────────────────────────────────────────
+
+    def _row_to_prompt_version(self, row) -> PromptVersion:
+        return PromptVersion(
+            id=row["id"],
+            name=row["name"],
+            version=row["version"],
+            template=row["template"],
+            description=row["description"],
+            tags=json.loads(row["tags"]) if row["tags"] else [],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            is_active=bool(row["is_active"]),
+        )
+
+    def save_prompt_version(self, pv: PromptVersion) -> PromptVersion:
+        """
+        Save a new version of a prompt template.
+
+        Automatically determines the next version number for the given name,
+        deactivates all previous versions, and stores the new one as active.
+
+        Args:
+            pv: PromptVersion with name and template (version may be 0/unset).
+
+        Returns:
+            The saved PromptVersion with its assigned version number.
+        """
+        cursor = self.conn.cursor()
+
+        # Determine next version number
+        cursor.execute(
+            "SELECT COALESCE(MAX(version), 0) FROM prompt_versions WHERE name = ?",
+            (pv.name,),
+        )
+        latest = cursor.fetchone()[0]
+        pv = pv.model_copy(update={"version": latest + 1})
+
+        # Deactivate previous versions for this name
+        cursor.execute(
+            "UPDATE prompt_versions SET is_active = 0 WHERE name = ?", (pv.name,)
+        )
+
+        cursor.execute(
+            """
+            INSERT INTO prompt_versions
+                (id, name, version, template, description, tags, created_at, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                pv.id,
+                pv.name,
+                pv.version,
+                pv.template,
+                pv.description,
+                json.dumps(pv.tags),
+                pv.created_at.isoformat(),
+                int(pv.is_active),
+            ),
+        )
+        self.conn.commit()
+        logger.info(f"Saved prompt version {pv.name} v{pv.version}")
+        return pv
+
+    def get_prompt_version(self, name: str, version: Optional[int] = None) -> Optional[PromptVersion]:
+        """
+        Get a specific (or latest active) version of a prompt.
+
+        Args:
+            name: Prompt name.
+            version: If given, return that specific version; otherwise return
+                     the latest active version.
+
+        Returns:
+            PromptVersion or None.
+        """
+        cursor = self.conn.cursor()
+        if version is not None:
+            cursor.execute(
+                "SELECT * FROM prompt_versions WHERE name = ? AND version = ?",
+                (name, version),
+            )
+        else:
+            cursor.execute(
+                "SELECT * FROM prompt_versions WHERE name = ? AND is_active = 1 LIMIT 1",
+                (name,),
+            )
+        row = cursor.fetchone()
+        return self._row_to_prompt_version(row) if row else None
+
+    def list_prompt_versions(self, name: str) -> List[PromptVersion]:
+        """
+        List all versions of a named prompt, newest first.
+
+        Args:
+            name: Prompt name.
+
+        Returns:
+            List of PromptVersion ordered by version descending.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT * FROM prompt_versions WHERE name = ? ORDER BY version DESC",
+            (name,),
+        )
+        return [self._row_to_prompt_version(row) for row in cursor.fetchall()]
+
+    def list_prompt_names(self) -> List[str]:
+        """
+        Return all distinct prompt names in the registry.
+
+        Returns:
+            Sorted list of unique prompt names.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT DISTINCT name FROM prompt_versions ORDER BY name")
+        return [row[0] for row in cursor.fetchall()]
+
+    def delete_prompt_version(self, name: str, version: int) -> bool:
+        """
+        Delete a specific prompt version.
+
+        Args:
+            name: Prompt name.
+            version: Version number to delete.
+
+        Returns:
+            True if deleted, False if not found.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "DELETE FROM prompt_versions WHERE name = ? AND version = ?",
+            (name, version),
+        )
+        self.conn.commit()
+        return cursor.rowcount > 0
 
 
 # Global database instance (singleton pattern for MVP)

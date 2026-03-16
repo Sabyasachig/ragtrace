@@ -1,6 +1,6 @@
 # RAGTrace 📊
 
-> **Observability for RAG pipelines** - Trace, inspect, and optimize Retrieval-Augmented Generation systems with ease.
+> **Observability for RAG pipelines** - Trace, inspect, optimize, and regression-test Retrieval-Augmented Generation systems with ease.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -11,11 +11,13 @@
 RAGTrace is a lightweight observability layer for RAG (Retrieval-Augmented Generation) systems that captures and visualizes every step of your pipeline:
 
 - 🔍 **Event Capture** - Automatically intercepts retrieval, prompt, and generation events
-- 💰 **Cost Tracking** - Accurate token counting and cost estimation per query
+- 💰 **Cost Tracking** - Accurate token counting and cost estimation per query (GPT-4o, Claude, Gemini, o1/o3 and more)
 - 📊 **Interactive Web UI** - Modern timeline view with charts, filters, and event inspection
 - 🔧 **CLI Tool** - Developer-friendly command-line interface
 - 🌐 **REST API** - Query and analyze sessions programmatically
-- 🧪 **Regression Testing** - Snapshot and compare RAG outputs
+- 🧪 **Regression Testing** - Snapshot and compare RAG outputs with scoring
+- 📝 **Prompt Versioning** - Track and diff prompt template changes over time
+- 🦙 **LlamaIndex Support** - First-class LlamaIndex callback integration
 
 **Think of it as OpenTelemetry, but specifically for RAG pipelines.**
 
@@ -28,18 +30,14 @@ RAGTrace is a lightweight observability layer for RAG (Retrieval-Augmented Gener
 git clone https://github.com/yourusername/ragtrace.git
 cd ragtrace
 
-# Install dependencies (using pip)
+# Install dependencies
 pip install -e .
-
-# Or using Poetry
-poetry install
-poetry shell
 
 # Initialize database
 ragtrace init
 ```
 
-### Basic Usage
+### Basic Usage (LangChain)
 
 ```python
 from langchain.vectorstores import FAISS
@@ -51,20 +49,39 @@ from ragtrace import RagTracer
 # Your existing RAG setup
 embeddings = OpenAIEmbeddings()
 vectorstore = FAISS.from_texts(["Your documents here..."], embeddings)
-llm = ChatOpenAI(model="gpt-3.5-turbo")
+llm = ChatOpenAI(model="gpt-4o-mini")
 
 # Add RAGTrace - just one line!
 tracer = RagTracer(auto_save=True)
 
-# Create chain with tracer
 chain = RetrievalQA.from_chain_type(
     llm=llm,
     retriever=vectorstore.as_retriever(),
     callbacks=[tracer]  # ← Automatic capture!
 )
 
-# Run your query (automatically captured)
 result = chain.run("What is RAG?")
+```
+
+### Basic Usage (LlamaIndex)
+
+```python
+from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+from ragtrace.llamaindex import SimpleRagTracerLlamaIndex
+
+# Build your index
+documents = SimpleDirectoryReader("data/").load_data()
+index = VectorStoreIndex.from_documents(documents)
+
+# Use as a context manager – automatically saves on exit
+with SimpleRagTracerLlamaIndex() as tracer:
+    query_engine = index.as_query_engine(
+        callbacks=[tracer]
+    )
+    response = query_engine.query("What is RAG?")
+    session_id = tracer.session_id
+
+print(f"Session saved: {session_id}")
 ```
 
 ### View Results
@@ -79,28 +96,20 @@ ragtrace list
 # Export to JSON
 ragtrace export <session-id> > session.json
 
-# Start API server (for Web UI)
-ragtrace run
-
-# Or start both servers for full Web UI experience
-uvicorn api.main:app --port 8000 &  # API server
-python ui/serve.py                   # UI server → http://localhost:3000
+# Start API + Web UI
+ragtrace run                  # API on :8000
+python ui/serve.py            # UI on :3000
 ```
 
 ## 🌐 Web UI
 
 RAGTrace includes a modern web interface for visualizing and analyzing your RAG pipelines:
 
-### Start the Servers
-
 ```bash
 # Terminal 1: Start API server
-cd ragtrace
-source venv/bin/activate
 uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Terminal 2: Start UI server
-cd ragtrace
 python ui/serve.py
 ```
 
@@ -112,26 +121,18 @@ Then open **http://localhost:3000** in your browser.
 - **📊 Timeline View** - Interactive timeline showing retrieval → prompt → generation flow
 - **📈 Performance Charts** - Waterfall chart for event durations, cost breakdown by component
 - **🔍 Event Inspector** - Click any event to see full details including tokens, costs, and data
-- **🎯 Smart Filters** - Filter events by type, duration, and cost
+- **📸 Regression Tab** - Create snapshots and run side-by-side regression comparisons
+- **📝 Prompts Tab** - Register prompt templates, browse versions, and view inline diffs
 - **📤 Export Tools** - Export session data as JSON or CSV, copy to clipboard
-
-### Quick UI Guide
-
-1. **Sessions Tab**: View all RAG sessions, sorted by recent activity
-2. **Timeline Tab**: Click on any session to see detailed event timeline
-3. **Click Events**: Click timeline events to inspect full details
-4. **Apply Filters**: Use dropdowns to filter by event type or performance metrics
-5. **Export Data**: Use export buttons to download session data
-
 
 ## 📊 Example Output
 
 ```
 ╭─ Session: d4f3a8b2-... ─────────────────────────────────╮
 │ Query: What is RAG?                                      │
-│ Model: gpt-3.5-turbo                                     │
-│ Cost: $0.00360                                           │
-│ Duration: 1,850ms                                        │
+│ Model: gpt-4o-mini                                       │
+│ Cost: $0.00012                                           │
+│ Duration: 1,250ms                                        │
 ╰──────────────────────────────────────────────────────────╯
 
 ┏━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┓
@@ -139,7 +140,7 @@ Then open **http://localhost:3000** in your browser.
 ┡━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━┩
 │ Retrieval   │ 150ms      │ $0.00001   │
 │ Prompt      │ 0ms        │ $0.00000   │
-│ Generation  │ 1,700ms    │ $0.00359   │
+│ Generation  │ 1,100ms    │ $0.00011   │
 └─────────────┴────────────┴────────────┘
 ```
 
@@ -147,53 +148,75 @@ Then open **http://localhost:3000** in your browser.
 
 ### ✅ Core Features
 
-- **Automatic Event Capture** - Works with LangChain callbacks
-- **Cost Tracking** - Uses tiktoken for accurate token counting
+- **Automatic Event Capture** - Works with LangChain and LlamaIndex callbacks
+- **Cost Tracking** - tiktoken-based accurate token counting (2025/2026 pricing)
 - **Timeline Visualization** - See your RAG pipeline in action
 - **Session Management** - Store and retrieve debugging sessions
 - **CLI Tool** - Rich formatted terminal output
 - **REST API** - FastAPI server with OpenAPI docs
 - **Web UI** - Interactive timeline with charts and event inspection
 - **JSON/CSV Export** - Export sessions for analysis
-- **Snapshot Testing** - Save and compare pipeline outputs
-
-### 🎨 Web UI Features
-
-- **Sessions Dashboard** - View all sessions with search and sort
-- **Interactive Timeline** - Click events to inspect details
-- **Performance Waterfall** - Visualize event durations side-by-side
-- **Cost Breakdown Chart** - See spending by component (embeddings, prompts, generation)
-- **Smart Filters** - Filter by event type, duration, or cost
-- **Real-time Updates** - WebSocket support for live session monitoring
-- **Export Tools** - Download as JSON, CSV, or copy to clipboard
+- **Regression Testing** - Save snapshots and score retrieval/answer regressions
+- **Prompt Versioning** - Version control for prompt templates with diff view
 
 ### 🎨 CLI Commands
 
 ```bash
-ragtrace init              # Initialize database
-ragtrace list              # List recent sessions
-ragtrace show [id]         # View session details
-ragtrace show last         # View latest  session
-ragtrace export <id>       # Export to JSON
-ragtrace clear             # Clear all data
-ragtrace snapshot save     # Save snapshot
-ragtrace snapshot list     # List snapshots
-ragtrace run               # Start API server
+ragtrace init                              # Initialize database
+ragtrace list                              # List recent sessions
+ragtrace show [id]                         # View session details
+ragtrace show last                         # View latest session
+ragtrace export <id>                       # Export session to JSON
+ragtrace clear                             # Clear all data
+ragtrace run                               # Start API server
+
+# Snapshot & regression
+ragtrace snapshot save <name>              # Create a named snapshot
+ragtrace snapshot list                     # List all snapshots
+ragtrace snapshot compare <id1> <id2>      # Compare snapshots (rich report)
+ragtrace snapshot compare <id1> <id2> --json  # Machine-readable output
+
+# Prompt versioning
+ragtrace prompt save <name> <template.txt> # Save a prompt version
+ragtrace prompt list                       # List all prompt names
+ragtrace prompt list <name>                # List versions for a prompt
+ragtrace prompt show <name>                # Show active template
+ragtrace prompt show <name> -v 2           # Show specific version
+ragtrace prompt diff <name> 1 2            # Colored unified diff
 ```
 
 ### 🌐 API Endpoints
 
 ```
-POST   /api/sessions                      # Create session
-GET    /api/sessions                      # List sessions
-GET    /api/sessions/{id}                 # Get session
-PATCH  /api/sessions/{id}                 # Update session
-DELETE /api/sessions/{id}                 # Delete session
-POST   /api/sessions/{id}/events          # Add event
-GET    /api/sessions/{id}/costs           # Get costs
-POST   /api/snapshots                     # Create snapshot
-GET    /api/snapshots                     # List snapshots
-GET    /api/snapshots/{id1}/compare/{id2} # Compare snapshots
+# Sessions
+POST   /api/sessions                          Create session
+GET    /api/sessions                          List sessions
+GET    /api/sessions/{id}                     Get session
+PATCH  /api/sessions/{id}                     Update session
+DELETE /api/sessions/{id}                     Delete session
+POST   /api/sessions/{id}/events              Add event
+GET    /api/sessions/{id}/cost                Get session cost
+
+# Snapshots & regression
+POST   /api/snapshots                         Create snapshot
+GET    /api/snapshots                         List snapshots
+GET    /api/snapshots/{id}                    Get snapshot
+DELETE /api/snapshots/{id}                    Delete snapshot
+GET    /api/snapshots/{id1}/compare/{id2}     Full comparison result
+GET    /api/snapshots/{id1}/score/{id2}       Regression score (PASS/WARN/FAIL)
+
+# Prompt versioning
+GET    /api/prompts                           List prompt names
+POST   /api/prompts                           Save new prompt version
+GET    /api/prompts/{name}                    List versions for a prompt
+GET    /api/prompts/{name}/active             Get active version
+GET    /api/prompts/{name}/versions/{v}       Get specific version
+GET    /api/prompts/{name}/diff/{va}/{vb}     Diff two versions
+DELETE /api/prompts/{name}/versions/{v}       Delete a version
+
+# Stats & costs
+GET    /api/stats                             Aggregate stats
+GET    /api/cost/breakdown                    Cost breakdown
 ```
 
 Visit `http://localhost:8000/docs` after running `ragtrace run` for interactive API documentation.
@@ -203,117 +226,142 @@ Visit `http://localhost:8000/docs` after running `ragtrace run` for interactive 
 ```
 ragtrace/
 ├── core/              # Core business logic
-│   ├── models.py      # Pydantic data models
-│   ├── storage.py     # SQLite database layer
-│   ├── cost.py        # Token counting & cost calculation
-│   └── capture.py     # Event aggregation
+│   ├── models.py      # Pydantic v2 data models (Session, Snapshot, PromptVersion…)
+│   ├── storage.py     # SQLite database layer (sessions, snapshots, prompt_versions)
+│   ├── cost.py        # Token counting & 2025/2026 cost table
+│   ├── capture.py     # Event aggregation & unused-chunk detection
+│   └── regression.py  # Snapshot diff engine (Jaccard + SequenceMatcher scoring)
 ├── langchain/         # LangChain integration
-│   └── middleware.py  # Callback handler
+│   └── middleware.py  # BaseCallbackHandler implementation
+├── llamaindex/        # LlamaIndex integration
+│   └── middleware.py  # RagTracerLlamaIndex + SimpleRagTracerLlamaIndex
 ├── api/               # REST API (FastAPI)
 │   ├── main.py        # FastAPI application
-│   └── routes.py      # API endpoints
-├── ui/                # Web UI (HTML/CSS/JS)
+│   └── routes.py      # All API endpoints (30+)
+├── ui/                # Web UI (HTML/CSS/Vanilla JS)
 │   ├── index.html     # Main UI page
-│   ├── app.js         # Frontend application logic
+│   ├── app.js         # Frontend application (sessions, timeline, regression, prompts)
 │   ├── styles.css     # UI styling
 │   └── serve.py       # Development server
 ├── cli/               # Command-line interface
-│   └── main.py        # Click CLI commands
+│   └── main.py        # Click CLI (snapshot compare, prompt group)
 ├── examples/          # Usage examples
 │   └── simple_rag.py  # Complete working example
-└── tests/             # Test suite
-    ├── test_cost.py   # Cost calculation tests
-    ├── test_storage.py # Database tests
-    └── test_capture.py # Capture logic tests
+└── tests/             # Test suite (150+ tests)
+    ├── test_cost.py
+    ├── test_storage.py
+    ├── test_capture.py
+    ├── test_regression.py
+    ├── test_prompt_versioning.py
+    └── test_llamaindex.py
+```
+
+## 🧪 Regression Testing
+
+RAGTrace makes it easy to catch regressions between RAG pipeline versions:
+
+```bash
+# 1. Save a baseline snapshot after a good run
+ragtrace snapshot save "v1-baseline"
+
+# 2. Make pipeline changes, run again, then snapshot
+ragtrace snapshot save "v2-candidate"
+
+# 3. Compare – get a PASS/WARN/FAIL verdict
+ragtrace snapshot compare <baseline-id> <candidate-id>
+```
+
+**Scoring** uses a weighted composite:
+- **Retrieval similarity** (40 %) — Jaccard set overlap of retrieved chunk texts
+- **Answer similarity** (60 %) — `difflib` SequenceMatcher ratio
+
+Verdicts: `PASS` (≥ 0.8), `WARN` (≥ 0.6), `FAIL` (< 0.6).
+
+Or via the API:
+```
+GET /api/snapshots/{id1}/score/{id2}
+→ {"verdict": "PASS", "score": 0.92, "retrieval_similarity": 0.95, "answer_similarity": 0.90}
+```
+
+## 📝 Prompt Versioning
+
+Track every change to your prompt templates:
+
+```bash
+# Save v1
+echo "Answer using: {context}\nQuestion: {question}" > prompt.txt
+ragtrace prompt save qa_prompt prompt.txt -d "Initial version"
+
+# Save v2 after tweaks
+echo "You are a helpful assistant.\nContext: {context}\nQ: {question}\nA:" > prompt.txt
+ragtrace prompt save qa_prompt prompt.txt -d "Added system message"
+
+# See what changed
+ragtrace prompt diff qa_prompt 1 2
+```
+
+Or via the API:
+```python
+import requests
+
+# Save a new version
+requests.post("http://localhost:8000/api/prompts", json={
+    "name": "qa_prompt",
+    "template": "Context: {context}\nQuestion: {question}",
+    "description": "v2 - cleaner format"
+})
+
+# Compare versions
+diff = requests.get("http://localhost:8000/api/prompts/qa_prompt/diff/1/2").json()
+print(diff["similarity_score"])  # e.g. 0.72
 ```
 
 ## 📋 Requirements
 
-- **Python**: 3.11+ (3.12 recommended)
-- **Dependencies**: FastAPI, LangChain, tiktoken, Rich, Click
-- **OpenAI API Key**: Required for examples (not for core functionality)
+- **Python**: 3.11+
+- **Core deps**: FastAPI, uvicorn, tiktoken, Rich, Click, pydantic v2
+- **Optional**: langchain (LangChain integration), llama-index (LlamaIndex integration)
 
 ## 🛠️ Development
 
-### Setup Development Environment
-
 ```bash
-# Clone repository
-git clone https://github.com/yourusername/ragtrace.git
-cd ragtrace
+# Install with dev dependencies
+pip install -e ".[dev]"
 
-# Install with development dependencies
-poetry install
-poetry shell
-
-# Run tests
+# Run all tests
 pytest
 
-# Run with coverage
-pytest --cov=core --cov=langchain --cov=api --cov=cli
-```
+# With coverage
+pytest --cov=core --cov=langchain --cov=llamaindex --cov=api --cov=cli
 
-### Running Tests
-
-```bash
-# All tests
-pytest
-
-# Specific test file
-pytest tests/test_cost.py -v
-
-# With coverage report
-pytest --cov=core tests/
-```
-
-### Code Quality
-
-```bash
-# Format code
+# Format + lint
 black .
-
-# Lint
 ruff check .
-
-# Type checking
-mypy .
 ```
-
-## 📖 Examples
-
-Check out the `examples/` directory for complete working examples:
-
-- **`simple_rag.py`** - Basic RAG pipeline with debugger
-- **`with_sources.py`** - RAG with source tracking (coming soon)
 
 ## 🔬 Use Cases
 
 ### 1. Debug Failed Queries
 ```bash
-# See exactly why your RAG pipeline failed
 ragtrace show last
 ```
 
 ### 2. Track Costs
 ```bash
-# Monitor spending per query
 ragtrace list --sort-by cost
 ```
 
-### 3. Identify Retrieval Issues
-```python
-# Check which documents were retrieved
-session = tracer.get_latest_session()
-print(session.retrieval_event.chunks)
+### 3. Regression Testing After Model Upgrade
+```bash
+ragtrace snapshot save "gpt-4o-mini-baseline"
+# upgrade model, re-run queries
+ragtrace snapshot save "gpt-4o-baseline"
+ragtrace snapshot compare <old-id> <new-id>
 ```
 
-### 4. Regression Testing
+### 4. Prompt A/B Testing
 ```bash
-# Save baseline
-ragtrace snapshot save "v1-baseline"
-
-# Compare after changes
-ragtrace snapshot compare <snapshot-id-1> <snapshot-id-2>
+ragtrace prompt diff qa_prompt 1 2
 ```
 
 ## 🤝 Contributing
@@ -333,31 +381,26 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - Built with [FastAPI](https://fastapi.tiangolo.com/)
-- Integrated with [LangChain](https://python.langchain.com/)
+- Integrated with [LangChain](https://python.langchain.com/) and [LlamaIndex](https://www.llamaindex.ai/)
 - Token counting via [tiktoken](https://github.com/openai/tiktoken)
 - Beautiful CLI with [Rich](https://rich.readthedocs.io/)
 
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/ragtrace/issues)
-- **Documentation**: See [examples/](examples/) directory
-- **API Docs**: Run `ragtrace run` and visit `http://localhost:8000/docs`
-
 ## 🗺️ Roadmap
 
-### v0.2.0 (Current)
+### v0.2.0 (Complete ✅)
 - [x] Web UI for timeline visualization
 - [x] Interactive event inspection
 - [x] Performance charts (waterfall, cost breakdown)
 - [x] Export tools (JSON, CSV)
-- [ ] Advanced regression testing
-- [ ] LlamaIndex integration
-- [ ] Prompt versioning
+- [x] Snapshot regression testing (PASS/WARN/FAIL scoring)
+- [x] LlamaIndex integration
+- [x] Prompt versioning (create, diff, CLI, API, Web UI)
+- [x] Updated 2025/2026 pricing (GPT-4o, o1, o3-mini baseline)
 
 ### v0.3.0 (Planned)
 - [ ] Agent tracing support
 - [ ] Cost optimization suggestions
-- [ ] Quality scoring
+- [ ] Quality scoring with LLM-as-judge
 - [ ] Team collaboration features
 
 ### v1.0.0
@@ -365,10 +408,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [ ] Advanced analytics
 - [ ] Alert system
 - [ ] Multi-framework support
-
-## ⭐ Star History
-
-If you find RAGTrace useful, please consider giving it a star! ⭐
 
 ---
 
