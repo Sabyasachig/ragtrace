@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ragtrace"
-version = "0.2.0"
+version = "0.2.1"
 description = "Observability and tracing for Retrieval-Augmented Generation pipelines"
 authors = ["Sabyasachi Ghosh"]
 readme = "README.md"
