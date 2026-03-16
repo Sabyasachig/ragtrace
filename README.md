@@ -21,6 +21,40 @@ RAGTrace is a lightweight observability layer for RAG (Retrieval-Augmented Gener
 
 **Think of it as OpenTelemetry, but specifically for RAG pipelines.**
 
+## ❓ Why RAGTrace?
+
+Building RAG systems with frameworks like LangChain and LlamaIndex is powerful, but debugging them is often difficult. When a pipeline produces a bad answer, developers typically struggle to pinpoint the cause:
+
+- 📄 Which documents were actually retrieved?
+- 🧩 How was the prompt constructed from those documents?
+- 🤔 Why did the model generate that specific response?
+- 💸 Where is token usage and cost accumulating?
+
+RAGTrace solves this by making RAG pipelines **observable and debuggable**. It captures the entire execution of a RAG query and presents it as a structured, inspectable trace — so you can answer those questions in seconds rather than hours.
+
+### How RAGTrace fits into the RAG stack
+
+| Tool           | Purpose                                              |
+|----------------|------------------------------------------------------|
+| **LangChain**  | Build LLM applications and pipelines                 |
+| **LlamaIndex** | Manage data ingestion and retrieval for RAG          |
+| **RAGTrace**   | Debug, inspect, and optimize RAG pipelines           |
+
+RAGTrace does **not** replace LangChain or LlamaIndex — it works alongside them as a non-invasive observability layer, the same way you'd add a tracer to any distributed system.
+
+### When to use RAGTrace
+
+RAGTrace is particularly useful when:
+
+- Your RAG system produces incorrect or hallucinated answers
+- Retrieved documents seem irrelevant to the query
+- You need to understand exactly how a prompt was assembled
+- Token usage or costs are higher than expected
+- You want to compare two versions of a pipeline side-by-side (regression testing)
+- You need to track changes to prompt templates over time
+
+By making RAG pipelines transparent, RAGTrace helps you iterate faster and build more reliable AI systems.
+
 ## 🚀 Quick Start
 
 ### Installation
