@@ -65,6 +65,9 @@ Thumbs.db
 # RAG Debugger specific
 .ragdebug/
 
+# Demo - intermediate frames only (demo.gif and scripts are tracked)
+demo/_demo_frames/
+
 # Temporary files
 *.tmp
 *.temp
