@@ -1,140 +1,137 @@
 #!/bin/bash
-# Quick setup script to push RAG Debugger to GitHub
+# RAGTrace GitHub helper
+# Modes:
+#   ./push-to-github.sh            → commit + push current branch + open PR URL
+#   ./push-to-github.sh --setup    → first-time remote setup (original flow)
+
+set -euo pipefail
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║          🚀 RAG Debugger - GitHub Push Helper                ║"
+echo "║            🚀 RAGTrace - GitHub Helper                       ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
-# Check if we're in the right directory
+# ── Sanity check ─────────────────────────────────────────────
 if [ ! -f "pyproject.toml" ]; then
-    echo "❌ Error: Please run this from the ragtrace directory"
+    echo "❌ Run this from the ragtrace/ directory"
     exit 1
 fi
 
-# Get GitHub username
-echo "📝 Enter your GitHub username:"
-read -r GITHUB_USERNAME
+# ════════════════════════════════════════════════════════════════
+# MODE: first-time setup
+# ════════════════════════════════════════════════════════════════
+if [ "${1:-}" = "--setup" ]; then
+    echo "📝 Enter your GitHub username:"
+    read -r GITHUB_USERNAME
+    [ -z "$GITHUB_USERNAME" ] && echo "❌ Username required" && exit 1
 
-if [ -z "$GITHUB_USERNAME" ]; then
-    echo "❌ Error: GitHub username is required"
-    exit 1
-fi
+    echo "📝 Enter repository name (default: ragtrace):"
+    read -r REPO_NAME
+    REPO_NAME=${REPO_NAME:-ragtrace}
 
-echo ""
-echo "✅ GitHub username: $GITHUB_USERNAME"
-echo ""
+    echo "🔑 Auth method — 1) HTTPS  2) SSH"
+    read -r -p "Choice (1/2): " AUTH_CHOICE
+    if [ "$AUTH_CHOICE" = "2" ]; then
+        REMOTE_URL="git@github.com:$GITHUB_USERNAME/$REPO_NAME.git"
+    else
+        REMOTE_URL="https://github.com/$GITHUB_USERNAME/$REPO_NAME.git"
+    fi
 
-# Ask for repository name (default: ragtrace)
-echo "📝 Enter repository name (default: ragtrace):"
-read -r REPO_NAME
-REPO_NAME=${REPO_NAME:-ragtrace}
-
-echo "✅ Repository name: $REPO_NAME"
-echo ""
-
-# Choose protocol
-echo "🔑 Choose authentication method:"
-echo "  1) HTTPS (requires Personal Access Token)"
-echo "  2) SSH (requires SSH key setup)"
-read -r -p "Enter choice (1 or 2): " AUTH_CHOICE
-
-if [ "$AUTH_CHOICE" = "2" ]; then
-    REMOTE_URL="git@github.com:$GITHUB_USERNAME/$REPO_NAME.git"
-    echo "✅ Using SSH: $REMOTE_URL"
-else
-    REMOTE_URL="https://github.com/$GITHUB_USERNAME/$REPO_NAME.git"
-    echo "✅ Using HTTPS: $REMOTE_URL"
-fi
-
-echo ""
-echo "════════════════════════════════════════════════════════════════"
-echo "⚠️  IMPORTANT: Before continuing, please:"
-echo "════════════════════════════════════════════════════════════════"
-echo ""
-echo "1. Go to: https://github.com/new"
-echo "2. Repository name: $REPO_NAME"
-echo "3. Description: DevTools for RAG pipelines"
-echo "4. Choose: Public (recommended)"
-echo "5. DO NOT initialize with README, .gitignore, or license"
-echo "6. Click 'Create repository'"
-echo ""
-echo "════════════════════════════════════════════════════════════════"
-echo ""
-read -r -p "Have you created the repository on GitHub? (y/n): " CREATED
-
-if [ "$CREATED" != "y" ] && [ "$CREATED" != "Y" ]; then
     echo ""
-    echo "👋 No problem! Create the repository first, then run this script again."
+    echo "⚠️  Create the repo first at https://github.com/new (no README/gitignore)"
+    read -r -p "Done? (y/n): " CREATED
+    [ "$CREATED" != "y" ] && [ "$CREATED" != "Y" ] && exit 0
+
+    git remote remove origin 2>/dev/null || true
+    git remote add origin "$REMOTE_URL"
+    echo "✅ Remote set to $REMOTE_URL"
+
+    git push -u origin main
     echo ""
-    echo "Quick link: https://github.com/new?name=$REPO_NAME&description=DevTools+for+RAG+pipelines"
+    echo "✅ Pushed! View at: https://github.com/$GITHUB_USERNAME/$REPO_NAME"
     exit 0
 fi
 
-echo ""
-echo "🔗 Adding remote origin..."
+# ════════════════════════════════════════════════════════════════
+# MODE: daily workflow — branch → stage → commit → push → PR URL
+# ════════════════════════════════════════════════════════════════
 
-# Remove remote if it exists
-git remote remove origin 2>/dev/null
-
-# Add remote
-if git remote add origin "$REMOTE_URL"; then
-    echo "✅ Remote added successfully"
-else
-    echo "❌ Failed to add remote"
+# Detect remote org/repo from origin URL
+ORIGIN_URL=$(git remote get-url origin 2>/dev/null || echo "")
+if [ -z "$ORIGIN_URL" ]; then
+    echo "❌ No git remote 'origin' found. Run: ./push-to-github.sh --setup"
     exit 1
 fi
+# Extract owner/repo from https or ssh URL
+GITHUB_SLUG=$(echo "$ORIGIN_URL" | sed -E 's|.*github\.com[:/](.+)\.git|\1|;s|.*github\.com[:/](.+)|\1|')
+GITHUB_USERNAME=$(echo "$GITHUB_SLUG" | cut -d'/' -f1)
+REPO_NAME=$(echo "$GITHUB_SLUG" | cut -d'/' -f2)
 
+# ── Branch ───────────────────────────────────────────────────
+CURRENT_BRANCH=$(git branch --show-current)
+echo "Current branch: $CURRENT_BRANCH"
 echo ""
-echo "🚀 Pushing to GitHub..."
-echo ""
+echo "📝 Branch name for this change (Enter to keep '$CURRENT_BRANCH'):"
+read -r BRANCH_INPUT
+BRANCH=${BRANCH_INPUT:-$CURRENT_BRANCH}
 
-# Push to GitHub
-if git push -u origin main; then
-    echo ""
-    echo "════════════════════════════════════════════════════════════════"
-    echo "✨ SUCCESS! Your repository is now on GitHub!"
-    echo "════════════════════════════════════════════════════════════════"
-    echo ""
-    echo "🔗 View your repository:"
-    echo "   https://github.com/$GITHUB_USERNAME/$REPO_NAME"
-    echo ""
-    echo "📊 Repository Stats:"
-    echo "   • 31 files"
-    echo "   • ~4,945 lines of code"
-    echo "   • 25 passing tests"
-    echo "   • MIT License"
-    echo ""
-    echo "🎯 Next Steps:"
-    echo "   1. Add repository topics: rag, debugging, langchain, llm, python"
-    echo "   2. Enable GitHub Issues"
-    echo "   3. Add a repository image (Settings → Social preview)"
-    echo "   4. Share your project!"
-    echo ""
-    echo "🎉 Happy debugging!"
-    echo ""
+if [ "$BRANCH" != "$CURRENT_BRANCH" ]; then
+    if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+        git checkout "$BRANCH"
+    else
+        git checkout -b "$BRANCH"
+        echo "✅ Created and switched to branch: $BRANCH"
+    fi
+fi
+
+# ── Stage & Commit ───────────────────────────────────────────
+echo ""
+git status --short
+echo ""
+echo "📝 Stage all changes? (Y/n):"
+read -r STAGE_ALL
+if [ "${STAGE_ALL:-y}" != "n" ] && [ "${STAGE_ALL:-y}" != "N" ]; then
+    git add -A
+    echo "✅ All changes staged"
+else
+    echo "📝 Enter files to stage (space-separated):"
+    read -r FILES
+    # shellcheck disable=SC2086
+    git add $FILES
+fi
+
+# Check if there's anything to commit
+if git diff --cached --quiet; then
+    echo "ℹ️  Nothing to commit — working tree clean"
 else
     echo ""
-    echo "════════════════════════════════════════════════════════════════"
-    echo "❌ Push Failed"
-    echo "════════════════════════════════════════════════════════════════"
-    echo ""
-    echo "Common fixes:"
-    echo ""
-    echo "1. Authentication failed (HTTPS):"
-    echo "   → Generate a Personal Access Token: https://github.com/settings/tokens"
-    echo "   → Use token as password when prompted"
-    echo ""
-    echo "2. Authentication failed (SSH):"
-    echo "   → Check SSH key: ssh -T git@github.com"
-    echo "   → Setup SSH: https://docs.github.com/en/authentication/connecting-to-github-with-ssh"
-    echo ""
-    echo "3. Repository doesn't exist:"
-    echo "   → Make sure you created it at: https://github.com/new"
-    echo ""
-    echo "4. Permission denied:"
-    echo "   → Check repository name matches: $REPO_NAME"
-    echo "   → Verify you own the repository"
-    echo ""
-    exit 1
+    echo "📝 Commit message:"
+    read -r COMMIT_MSG
+    [ -z "$COMMIT_MSG" ] && echo "❌ Commit message required" && exit 1
+    git commit -m "$COMMIT_MSG"
+    echo "✅ Committed"
 fi
+
+# ── Push ─────────────────────────────────────────────────────
+echo ""
+echo "🚀 Pushing '$BRANCH' to origin…"
+git push -u origin "$BRANCH"
+echo "✅ Pushed"
+
+# ── PR URL ───────────────────────────────────────────────────
+DEFAULT_BRANCH=$(git remote show origin 2>/dev/null | grep "HEAD branch" | awk '{print $NF}' || echo "main")
+PR_URL="https://github.com/$GITHUB_USERNAME/$REPO_NAME/compare/$DEFAULT_BRANCH...$BRANCH?expand=1"
+
+echo ""
+echo "════════════════════════════════════════════════════════════════"
+echo "✨ Done! Open this URL to create the PR:"
+echo ""
+echo "   $PR_URL"
+echo "════════════════════════════════════════════════════════════════"
+echo ""
+
+# Auto-open in browser on macOS
+if command -v open &>/dev/null; then
+    open "$PR_URL"
+fi
+
