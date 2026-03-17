@@ -27,13 +27,21 @@ jobs:
       - name: Install build tools
         run: pip install --upgrade build twine
 
-      - name: Read current version
+      - name: Derive version from release tag
         id: current_version
-        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> $GITHUB_OUTPUT
-
-      - name: Sync pyproject.toml version before build
         run: |
-          sed -i "s/^version = .*/version = \"${{ steps.current_version.outputs.version }}\"/" pyproject.toml
+          # Tag is e.g. "v0.2.2" or "0.2.2" — strip leading 'v'
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION (from tag: $TAG)"
+
+      - name: Sync VERSION + pyproject.toml + setup.py from tag
+        run: |
+          VERSION="${{ steps.current_version.outputs.version }}"
+          echo "$VERSION" > VERSION
+          sed -i "s/^version = .*/version = \"$VERSION\"  # kept in sync by CI — source of truth is VERSION file/" pyproject.toml
+          sed -i "s/^    version=.*/    version=\"$VERSION\",/" setup.py
 
       - name: Build distribution
         run: python -m build
