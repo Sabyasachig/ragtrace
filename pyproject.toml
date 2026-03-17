@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ragtrace"
-version = "0.2.2"
+version = "0.2.2"  # kept in sync by CI — source of truth is VERSION file
 description = "Observability and tracing for Retrieval-Augmented Generation pipelines"
 authors = ["Sabyasachi Ghosh"]
 readme = "README.md"

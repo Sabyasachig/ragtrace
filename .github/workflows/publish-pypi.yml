@@ -9,10 +9,15 @@ jobs:
   publish-prod:
     name: Build and publish to PyPI
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to push the version bump commit
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -21,6 +26,14 @@ jobs:
 
       - name: Install build tools
         run: pip install --upgrade build twine
+
+      - name: Read current version
+        id: current_version
+        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> $GITHUB_OUTPUT
+
+      - name: Sync pyproject.toml version before build
+        run: |
+          sed -i "s/^version = .*/version = \"${{ steps.current_version.outputs.version }}\"/" pyproject.toml
 
       - name: Build distribution
         run: python -m build
@@ -31,3 +44,23 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
           twine upload --skip-existing dist/*
+
+      - name: Bump patch version for next release
+        id: bump
+        run: |
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          NEXT_PATCH=$((PATCH + 1))
+          NEXT_VERSION="$MAJOR.$MINOR.$NEXT_PATCH"
+          echo "$NEXT_VERSION" > VERSION
+          sed -i "s/^version = .*/version = \"$NEXT_VERSION\"  # kept in sync by CI — source of truth is VERSION file/" pyproject.toml
+          sed -i "s/^version = .*/version = \"$NEXT_VERSION\"/" setup.py 2>/dev/null || true
+          echo "next_version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Commit and push version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION pyproject.toml setup.py
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.next_version }} after release [skip ci]"
+          git push origin HEAD:main
