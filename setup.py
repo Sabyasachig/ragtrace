@@ -13,11 +13,11 @@ long_description = readme_file.read_text() if readme_file.exists() else ""
 
 # Single source of truth for version
 version_file = Path(__file__).parent / "VERSION"
-version = version_file.read_text().strip()
+version = "0.3.3"
 
 setup(
     name="ragtrace",
-    version=version,
+    version="0.3.2",
     description="Observability and tracing for Retrieval-Augmented Generation pipelines",
     long_description=long_description,
     long_description_content_type="text/markdown",
