@@ -453,7 +453,7 @@ async function loadTimeline(sessionId) {
         STATE.currentEvents = eventsData.events || eventsData || [];
         STATE.currentCostData = costData;
 
-        renderSessionInfo(sessionData, costData);
+        renderSessionInfo(sessionData.session || sessionData, costData);
         renderTimeline(STATE.currentEvents);
         renderWaterfallChart(STATE.currentEvents);
         renderCostChart(costData);
@@ -960,22 +960,21 @@ function escapeHtml(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function createSnapshot() {
+async function createSnapshot() {
+    // Load sessions to populate dropdown
+    let sessionOptions = '<option value="">Loading sessions…</option>';
     showModal('Create Snapshot', `
         <div style="display: flex; flex-direction: column; gap: 1rem;">
             <div>
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Snapshot Name</label>
-                <input type="text" id="snapshot-name" placeholder="e.g., Production Baseline" 
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Session to Snapshot</label>
+                <select id="snapshot-session-id"
                     style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0.5rem;">
+                    ${sessionOptions}
+                </select>
             </div>
             <div>
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Description</label>
-                <textarea id="snapshot-desc" placeholder="Optional description" rows="3"
-                    style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0.5rem;"></textarea>
-            </div>
-            <div>
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Session ID (to snapshot)</label>
-                <input type="text" id="snapshot-session-id" placeholder="e.g., abc-123…" 
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Tags (comma-separated, optional)</label>
+                <input type="text" id="snapshot-tags" placeholder="e.g., baseline, production" 
                     style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0.5rem;">
             </div>
             <button class="btn-primary" onclick="saveSnapshot()" style="align-self: flex-end;">
@@ -983,20 +982,39 @@ function createSnapshot() {
             </button>
         </div>
     `);
+
+    // Populate sessions after modal renders
+    try {
+        const data = await api.getSessions(100, 0);
+        const sessions = Array.isArray(data) ? data : (data.sessions || []);
+        const select = document.getElementById('snapshot-session-id');
+        if (select) {
+            if (sessions.length === 0) {
+                select.innerHTML = '<option value="">No sessions available</option>';
+            } else {
+                select.innerHTML = sessions.map(s =>
+                    `<option value="${s.id}">${s.id} — ${s.query ? s.query.slice(0, 60) : 'No query'}</option>`
+                ).join('');
+            }
+        }
+    } catch (e) {
+        const select = document.getElementById('snapshot-session-id');
+        if (select) select.innerHTML = '<option value="">Failed to load sessions</option>';
+    }
 }
 
 async function saveSnapshot() {
-    const name = document.getElementById('snapshot-name').value.trim();
-    const description = document.getElementById('snapshot-desc').value.trim();
     const sessionId = document.getElementById('snapshot-session-id').value.trim();
+    const tagsRaw = document.getElementById('snapshot-tags').value.trim();
+    const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
 
-    if (!name) {
-        showToast('Error', 'Please enter a snapshot name', 'error');
+    if (!sessionId) {
+        showToast('Error', 'Please select a session', 'error');
         return;
     }
 
     try {
-        await api.createSnapshot({ name, description, session_id: sessionId || undefined });
+        await api.createSnapshot({ session_id: sessionId, tags });
         showToast('Success', 'Snapshot created successfully', 'success');
         closeModal();
         loadSnapshots();

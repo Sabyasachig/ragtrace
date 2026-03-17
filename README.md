@@ -6,6 +6,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
+![RAGTrace Demo](demo/demo.gif)
+
 ## ✨ What is RAGTrace?
 
 RAGTrace is a lightweight observability layer for RAG (Retrieval-Augmented Generation) systems that captures and visualizes every step of your pipeline:
